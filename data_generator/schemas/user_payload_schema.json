@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "User Event Payload",
+  "type": "object",
+  "required": ["user_id"],
+  "properties": {
+    "user_id": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string",
+      "format": "email"
+    },
+    "country": {
+      "type": "string"
+    },
+    "device": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

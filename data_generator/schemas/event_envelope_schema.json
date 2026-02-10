@@ -1,0 +1,30 @@
+{
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "Event Envelope",
+	"type": "object",
+	"required": ["event_id", "event_type", "source", "event_ts", "ingest_ts", "payload"],
+	"properties": {
+		"event_id": {
+			"type": "string"
+		},
+		"event_type": {
+			"type": "string"
+			"enum": ["user_events", "order_events", "payment_events"]
+		},
+		"source": {
+			"type": "string"
+		},
+		"event_ts": {
+			"type": "string",
+			"format": "date-time"
+		},
+		"ingest_ts": {
+			"type": "string",
+			"format": "date-time"
+		},
+		"payload": {
+			"type": "object"
+		}
+	},
+	"additionalProperties": false
+}
