@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv
+venv/
+
+# OS
+.DS_Store
+
+# Logs
+*.log
+
+# Spark / Glue
+spark-warehouse/
+.metastore_db/
+
+# Test data (we'll upload, not commit raw dumps)
+data_generator/output/
+
+#IDE
+.vscode/
+.vscode-remote-containers/
+.vscode-server/
