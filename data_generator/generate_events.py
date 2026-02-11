@@ -90,7 +90,32 @@ def generate_payment_event():
     }
 
 event_generators = {
-    "user_events": generate_user_event,
-    "order_events": generate_order_event,
-    "payment_events": generate_payment_event
+    "user_events": generate_user_event(),
+    "order_events": generate_order_event(),
+    "payment_events": generate_payment_event()
 }
+
+# ----------------- File Writer -----------------
+def write_file(domain, events):
+    file_obj = {
+        "file_id": f"{domain}_{int(time.time())}",
+        "domain": domain,
+        "source_system": "generator",
+        "generated_at": now_iso(),
+        "events": events
+    }
+    filename = f"{file_obj['file_id']}.json"
+    path = os.path.join(output_dir, filename)
+
+    # Duplicate file simulation
+    if random.random() < corruption['duplicate_file_probability']:
+        print('Writing duplicate file')
+    
+    data = json.dumps(file_obj, indent=2)
+
+    # Truncate file simulation
+    if random.random() < config['truncate_file_probability']:
+        data = data[:len(data) // 2]
+    
+    with open(path, 'w') as f:
+        f.write(data)
