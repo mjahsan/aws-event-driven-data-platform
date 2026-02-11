@@ -142,4 +142,7 @@ def run():
         time.sleep(0.01) # Stimulate upcoming events
 
 if __name__ == "__main__":
-    run()
+    try:
+        run()
+    except KeyboardInterrupt:
+        print("Shutting down event generator...")
