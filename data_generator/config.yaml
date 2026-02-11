@@ -1,0 +1,11 @@
+output_dir: data_generator/output
+
+batching:
+    max_events_per_file: 500
+    max_batch_seconds: 120
+   
+corruption:
+    duplicate_file_probability: 0.1
+    malformed_json_probability: 0.05
+    payload_corruption_probability: 0.1
+    truncate_file_probability: 0.05
