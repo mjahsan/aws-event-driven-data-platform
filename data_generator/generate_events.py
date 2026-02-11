@@ -25,3 +25,72 @@ def now_iso():
 def random_id(prefix):
     return f"{prefix}_{uuid.uuid4().hex[:10]}"
 
+# ----------------- Event Generation -----------------
+def generate_user_event():
+    event_type = random.choice(
+        ["user_created", "user_login"]
+    )
+
+    payload = {
+        "user_id": random_id("u"),
+        "country": random.choice(["IN", "US", "UK", "DE"]),
+        "device": random.choice(["ios", "android", "web"])
+    }
+    if event_type == "user_login":
+        payload["status"] = random.choice(["login_success", "login_failed"])
+    else:
+        payload["status"] = random.choice(["user_creation_success", "user_creation_failed"])
+
+    return {
+        "event_id": random_id("event_u"),
+        "event_type": event_type,
+        "source": "mobile_app",
+        "event_ts": now_iso(),
+        "ingest_ts": now_iso(),
+        "payload": payload
+    }
+
+def generate_order_event():
+    return {
+        "event_id": random_id("event_o"),
+        "event_type": random.choice(["order_created", "order_paid"]),
+        "source": "web",
+        "event_ts": now_iso(),
+        "ingest_ts": now_iso(),
+        "payload": {
+            "order_id": random_id("o"),
+            "user_id": random_id("u"),
+            "amount": round(random.uniform(10, 500), 2),
+            "currency": "INR"
+        }
+    }
+
+def generate_payment_event():
+    event_type = random.choice(
+        ["payment_initiated", "payment_success", "payment_failed"]
+    )
+
+    payload = {
+        "payment_id": random_id("p"),
+        "order_id": random_id("o"),
+    }
+    if event_type == "payment_failed":
+        payload["failure_reason"] = random.choice(["insufficient_funds", "card_expired", "network_error"])
+    else:
+        payload["amount"] = round(random.uniform(10, 5000), 2)
+        payload["currency"] = "INR"
+
+    return {
+        "event_id": random_id("event_p"),
+        "event_type": event_type,
+        "source": "mobile_app",
+        "event_ts": now_iso(),
+        "ingest_ts": now_iso(),
+        "payload": payload
+    }
+
+event_generators = {
+    "user_events": generate_user_event,
+    "order_events": generate_order_event,
+    "payment_events": generate_payment_event
+}
