@@ -16,7 +16,8 @@ os.makedirs(output_dir, exist_ok=True)
 max_events = config['batching']['max_events_per_file'] 
 max_seconds = config['batching']['max_batch_seconds'] 
 
-corruption = config['corruption'] 
+mode = config['mode']
+corruption = config['corruption'][mode]
 
 # ----------------- Helpers -----------------
 def now_iso():
@@ -95,51 +96,98 @@ event_generators = {
     "payment_events": generate_payment_event
 }
 
+def maybe_corrupt_payload(event, domain):
+    corrupted = False
+
+    if random.random() < corruption['payload_corruption_probability']:
+        corrupted = True
+    
+        if domain == "user_events":
+            event['payload'].pop('user_id', None) 
+        
+        elif domain == "order_events":
+            corrupted_fields = random.choice(["remove_order_id", "negative_amount", "invalid_data_type"])
+            if corrupted_fields == "remove_order_id":
+                event['payload'].pop('order_id', None)
+            elif corrupted_fields == "negative_amount":
+                if 'amount' in event['payload']:
+                    event['payload']['amount'] = -abs(event['payload']['amount'])
+            elif corrupted_fields == "invalid_data_type":
+                if 'amount' in event['payload']:
+                    event['payload']['amount'] = "invalid_amount"
+        
+        elif domain == "payment_events":
+            event["payload"].pop('payment_id', None)
+
+    return event, corrupted
+
 # ----------------- File Writer -----------------
-def write_file(domain, events):
+def write_file(domain, events, payload_corrupt_count):
     file_obj = {
-        "file_id": f"{domain}_{int(time.time())}",
+        "file_id": f"{domain}_{int(time.time())}_{uuid.uuid4().hex[:5]}",
         "domain": domain,
         "source_system": "generator",
-        "generated_at": now_iso(),
+        "created_at": now_iso(),
         "events": events
     }
     filename = f"{file_obj['file_id']}.json"
     path = os.path.join(output_dir, filename)
-
-    # Duplicate file simulation
-    if random.random() < corruption['duplicate_file_probability']:
-        print('Writing duplicate file')
     
     data = json.dumps(file_obj, indent=2)
 
+    # Malformed JSON simulation
+    malformed = False
+    if random.random() < corruption['malformed_json_probability']:
+        malformed = True
+        data = data[:-10]
+
     # Truncate file simulation
+    truncated = False
     if random.random() < corruption['truncate_file_probability']:
+        truncated = True
         data = data[:len(data) // 2]
+
+    # Duplicate file simulation
+    duplicated = False
+    if random.random() < corruption['duplicate_file_probability']:
+        duplicated = True
+        duplicate_filename = f"{file_obj['file_id']}_duplicate.json"
+        duplicate_path = os.path.join(output_dir, duplicate_filename)
+        with open(duplicate_path, 'w') as f:
+            f.write(data)
     
     with open(path, 'w') as f:
         f.write(data)
     
     print(f"Wrote file {filename} with {len(events)} events")
+    print(f"Payload corrupted events in this batch: {payload_corrupt_count}")
+    print(f"File corruption status - Malformed JSON: {malformed}, Truncated: {truncated}, Duplicated: {duplicated}")
 
 # ----------------- Main Loop -----------------
 def run():
     buffer = []
     last_flush = time.time()
+    payload_corrupt_count = 0
     domain = random.choice(list(event_generators.keys()))
 
     while True:
         event = event_generators[domain]()
+        event, corrupted = maybe_corrupt_payload(event, domain)
+
+        if corrupted:
+            payload_corrupt_count += 1
+
         buffer.append(event)
 
         now = time.time()
         if len(buffer) >= max_events or (now - last_flush) >= max_seconds:
-            write_file(domain, buffer)
+            write_file(domain, buffer, payload_corrupt_count)
             buffer =[]
             last_flush = now
+            payload_corrupt_count = 0
             domain = random.choice(list(event_generators.keys()))
         
-        time.sleep(0.01) # Stimulate upcoming events
+        time.sleep(0.01) # Stimulate event arrival
 
 if __name__ == "__main__":
     try:

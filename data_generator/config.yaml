@@ -3,9 +3,17 @@ output_dir: data_generator/output
 batching:
     max_events_per_file: 500
     max_batch_seconds: 120
+
+mode: dev   # dev or prod
    
 corruption:
-    duplicate_file_probability: 0.1
-    malformed_json_probability: 0.05
-    payload_corruption_probability: 0.1
-    truncate_file_probability: 0.05
+    prod:
+        duplicate_file_probability: 0.1
+        malformed_json_probability: 0.05
+        payload_corruption_probability: 0.1
+        truncate_file_probability: 0.05
+    dev:
+        duplicate_file_probability: 0.3
+        malformed_json_probability: 0.2
+        payload_corruption_probability: 0.05
+        truncate_file_probability: 0.2
