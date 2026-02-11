@@ -119,3 +119,27 @@ def write_file(domain, events):
     
     with open(path, 'w') as f:
         f.write(data)
+    
+    print(f"Wrote file {filename} with {len(events)} events")
+
+# ----------------- Main Loop -----------------
+def run():
+    buffer = []
+    last_flush = time.time()
+    domain = random.choice(list(event_generators.keys()))
+
+    while True:
+        event = event_generators[domain]
+        buffer.append(event)
+
+        now = time.time()
+        if len(buffer) >= max_events or (now - last_flush) >= max_seconds:
+            write_file(domain, buffer)
+            buffer =[]
+            last_flush = now
+            domain = random.choice(list(event_generators.keys()))
+        
+        time.sleep(0.01) # Stimulate upcoming events
+
+if __name__ == "__main__":
+    run()
