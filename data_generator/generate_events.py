@@ -7,7 +7,7 @@ import os
 import yaml
 
 # ----------------- Configuration -----------------
-with open('config.yaml') as f:
+with open(r'data_generator/config.yaml') as f:
     config = yaml.safe_load(f)
 
 output_dir = config['output_dir'] 
@@ -90,9 +90,9 @@ def generate_payment_event():
     }
 
 event_generators = {
-    "user_events": generate_user_event(),
-    "order_events": generate_order_event(),
-    "payment_events": generate_payment_event()
+    "user_events": generate_user_event,
+    "order_events": generate_order_event,
+    "payment_events": generate_payment_event
 }
 
 # ----------------- File Writer -----------------
@@ -114,7 +114,7 @@ def write_file(domain, events):
     data = json.dumps(file_obj, indent=2)
 
     # Truncate file simulation
-    if random.random() < config['truncate_file_probability']:
+    if random.random() < corruption['truncate_file_probability']:
         data = data[:len(data) // 2]
     
     with open(path, 'w') as f:
@@ -129,7 +129,7 @@ def run():
     domain = random.choice(list(event_generators.keys()))
 
     while True:
-        event = event_generators[domain]
+        event = event_generators[domain]()
         buffer.append(event)
 
         now = time.time()
