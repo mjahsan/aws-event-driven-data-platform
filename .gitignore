@@ -24,3 +24,6 @@ data_generator/output/
 .vscode/
 .vscode-remote-containers/
 .vscode-server/
+
+#aws
+.aws/
