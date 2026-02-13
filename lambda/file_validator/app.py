@@ -55,6 +55,21 @@ def lambda_handler(event, context):
                     continue
                 elif int(existing['Item']['retry_count']['N']) > 5: # Setting the maximum retry count to 5
                     print(f'SKIP - MAX RETRY COUNT EXCEEDED - {key}')
+                    dynamodb.update_table(
+                        TableName = table_name,
+                        Key = {
+                            'etag': {'S': etag}
+                        },
+                        UpdateExpression = 'SET #s = :status, #u = :updated_at',
+                        ExpressionAttributeNames = {
+                            '#s': 'status',
+                            '#u': 'updated_at'
+                        },
+                        ExpressionAttributeValues = {
+                            ':status': {'S': 'FAILED'},
+                            ':updated_at': {'S': datetime.now(timezone.utc).isoformat()}
+                        }
+                    )
                     continue
                 elif existing['Item']['status']['S'] == 'IN_PROGRESS' and int(existing['Item']['lease_expiry']['N']) <= int(time.time()):
                     print (f'RECLAIMING DUE TO EXPIRED LEASE - {key}')
@@ -101,7 +116,14 @@ def process_file(bucket, key, etag):
         data = response['Body'].read().decode('utf-8')
         print(f'Completed reading the file, {key}')
 
-        update_table(etag, key)
+        try:
+            parsed = json.loads(data)
+            print(f'File {key} is a valid JSON. Processing completed')
+            update_table(etag, key)
+            
+        except json.JSONDecodeError:
+            print(f'Malformed JSON')
+            raise Exception(f'File {key} is not a valid JSON')
 
     except Exception as e:
         print(f'Error message: {e}')
