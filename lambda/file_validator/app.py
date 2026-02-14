@@ -50,27 +50,11 @@ def lambda_handler(event, context):
                 if existing['Item']['status']['S'] == 'COMPLETED':
                     print(f'SKIP - ALREADY PROCESSED - {key}')
                     continue
+
                 elif existing['Item']['status']['S'] == 'IN_PROGRESS' and int(existing['Item']['lease_expiry']['N']) > int(time.time()):
                     print(f'SKIP - ANOTHER WORKER PROCESSING - {key}')
                     continue
-                elif int(existing['Item']['retry_count']['N']) > 3: # Setting the maximum retry count to 3
-                    print(f'SKIP - MAX RETRY COUNT EXCEEDED - {key}')
-                    dynamodb.update_item(
-                        TableName = table_name,
-                        Key = {
-                            'etag': {'S': etag}
-                        },
-                        UpdateExpression = 'SET #s = :status, #u = :updated_at',
-                        ExpressionAttributeNames = {
-                            '#s': 'status',
-                            '#u': 'updated_at'
-                        },
-                        ExpressionAttributeValues = {
-                            ':status': {'S': 'FAILED'},
-                            ':updated_at': {'S': datetime.now(timezone.utc).isoformat()}
-                        }
-                    )
-                    continue
+        
                 elif existing['Item']['status']['S'] == 'IN_PROGRESS' and int(existing['Item']['lease_expiry']['N']) <= int(time.time()):
                     print (f'RECLAIMING DUE TO EXPIRED LEASE - {key}')
 
@@ -140,8 +124,25 @@ def process_file(bucket, key, etag):
         except json.JSONDecodeError:
             print(f'Malformed JSON')
             malformed_file_handler(bucket, key, etag)
-            raise Exception(f'File {key} is not a valid JSON')
+            
+            dynamoDB.update_item(
+                TableName = table_name,
+                Key = {
+                    'etag': {'S': etag}
+                },
+                UpdateExpression = 'SET #s = :status, #u = :updated_at',
+                ExpressionAttributeNames = {
+                    '#s': 'status',
+                    '#u': 'updated_at'
+                },
+                ExpressionAttributeValues = {
+                    ':status': {'S': 'REJECTED'},
+                    ':updated_at': {'S': datetime.now(timezone.utc).isoformat()}
+                }
+            )
 
+            print(f'DATA ISSUE - {key} moved to rejected folder')
+            
     except Exception as e:
         print(f'Error message: {e}')
         raise e
