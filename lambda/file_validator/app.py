@@ -125,7 +125,7 @@ def process_file(bucket, key, etag):
             print(f'Malformed JSON')
             malformed_file_handler(bucket, key, etag)
             
-            dynamoDB.update_item(
+            dynamodb.update_item(
                 TableName = table_name,
                 Key = {
                     'etag': {'S': etag}
@@ -142,7 +142,7 @@ def process_file(bucket, key, etag):
             )
 
             print(f'DATA ISSUE - {key} moved to rejected folder')
-            
+
     except Exception as e:
         print(f'Error message: {e}')
         raise e
