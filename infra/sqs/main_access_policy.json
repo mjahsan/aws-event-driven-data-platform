@@ -1,0 +1,28 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "OwnerFullAccess",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::<ACCOUNT NUMBER>:root"
+      },
+      "Action": "SQS:*",
+      "Resource": "arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:event-platform-new"
+    },
+    {
+      "Sid": "AllowS3ToSendMessage",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "s3.amazonaws.com"
+      },
+      "Action": "SQS:SendMessage",
+      "Resource": "arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:event-platform-new",
+      "Condition": {
+        "ArnEquals": {
+          "aws:SourceArn": "arn:aws:s3:::event-platform-new"
+        }
+      }
+    }
+  ]
+}

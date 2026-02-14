@@ -1,0 +1,116 @@
+project:
+    name: 
+        aws-event-driven-data-platform
+    environment: 
+        dev
+  
+s3:
+    bucket: 
+        event-platform-new
+    layers:
+        raw: 
+            raw/
+        validated:
+            validated/user_events
+            validated/payment_events
+            validated/order_events
+        rejected:
+            rejected/
+            
+    ingestion:
+        sllowed_extension: 
+            json
+        data_generator_for_ingestion:
+            script:
+                data_generator/generate_events.py
+            schemas:
+                data_generator/schemas
+                    - event_envelope_schema.json
+                    - file_container_schema.json
+                    - order_payload_schema.json
+                    - payment_payload_schema.json
+                    - user_payload_schema.json
+            
+iam:
+    lambda_role:
+        role_name:
+            event-platform-lambda_role
+        policy_script:
+            infra/iam/lambda/lambda_execution_policy.json
+            
+lambda:
+    raw_to_validated_or_rejected:
+        function_name: 
+            event_processing_function
+        timeout_seconds: 
+            30
+        memory_mb: 
+            1024
+    
+dynamodb:
+    table_name:
+        event-platform-metadata
+    partition_key:
+        etag
+    sort_key:
+        None
+    capacity_mode:
+        on-demand
+    global_secondary_index:
+        None
+    local_secondary_index:
+        None
+        
+sqs:
+    main_queue:
+        queue_name: 
+            event-platform-new
+        visibility_timeout_seconds:
+            30
+        message_retention_period_days:
+            4
+        maximum_message_size:
+            1024
+        delivery_delay_seconds:
+            0
+        recieve_message_wait_time_seconds:
+            0
+        encryption:
+            server-side-enncryption:
+                enabled
+        dead_letter_queue:
+            enabled
+            queue_name:
+                arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:dlq-event-platform-new
+            maximum_retry_count:
+                3
+        access_policy:
+            infra/sqs/main_access_policy.json
+    
+    dead_letter_queue:
+        queue_name: 
+            event-platform-new
+        visibility_timeout_seconds:
+            30
+        message_retention_period_days:
+            4
+        maximum_message_size:
+            1024
+        delivery_delay_seconds:
+            0
+        recieve_message_wait_time_seconds:
+            0
+        encryption:
+            server-side-enncryption:
+                enabled
+        redrive_allow_policy:
+            enabled
+            permission:
+                by_queue
+            queue_name:
+                arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:event-platform-new
+        dead_letter_queue:
+            diabled
+        access_policy:
+            infra/sqs/main_access_policy.json
+        

@@ -1,0 +1,60 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "SQSPolling",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage",
+                "sqs:GetQueueAttributes"
+            ],
+            "Resource": "arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:event-platform-new"
+        },
+        {
+            "Sid": "SQSDeadLetterQueue",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:SendMessage"
+            ],
+            "Resource": "arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:dlq-event-platform-new"
+        },
+        {
+            "Sid": "S3GetAndDeleteInRaw",
+            "Effect": "Allow",
+            "Action": [
+                "s3:GetObject",
+                "s3:DeleteObject"
+            ],
+            "Resource": "arn:aws:s3:::event-platform-new/raw/*"
+        },
+        {
+            "Sid": "S3PutInFolders",
+            "Effect": "Allow",
+            "Action": [
+                "s3:PutObject"
+            ],
+            "Resource": "arn:aws:s3:::event-platform-new/*"
+        },
+	{
+            "Sid": "logs",
+            "Effect": "Allow",
+            "Action": [
+                "logs:CreateLogGroup",
+		"logs:CreateLogStream",
+		"logs:PutLogEvents"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "DynamoDBAccess",
+            "Effect": "Allow",
+            "Action": [
+                "dynamodb:PutItem",
+                "dynamodb:UpdateItem",
+                "dynamodb:GetItem"
+            ],
+            "Resource": "arn:aws:dynamodb:<REGION>:<ACCOUNT NUMBER>:table/event-platform-metadata"
+        }
+    ]
+}

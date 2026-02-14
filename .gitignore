@@ -9,6 +9,7 @@ venv/
 
 # OS
 .DS_Store
+.swp
 
 # Logs
 *.log
