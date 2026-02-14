@@ -26,7 +26,7 @@ def lambda_handler(event, context):
                     Item = {
                         'etag': {'S': etag},
                         'status': {'S': "IN_PROGRESS"},
-                        'lease_expiry': {'N': str((int(time.time()) + 600))},
+                        'lease_expiry': {'N': str((int(time.time()) + 60))},
                         'created_at': {'S': datetime.now(timezone.utc).isoformat()},
                         'updated_at': {'S': datetime.now(timezone.utc).isoformat()},
                         'retry_count': {'N': '0'}
@@ -53,9 +53,9 @@ def lambda_handler(event, context):
                 elif existing['Item']['status']['S'] == 'IN_PROGRESS' and int(existing['Item']['lease_expiry']['N']) > int(time.time()):
                     print(f'SKIP - ANOTHER WORKER PROCESSING - {key}')
                     continue
-                elif int(existing['Item']['retry_count']['N']) > 5: # Setting the maximum retry count to 5
+                elif int(existing['Item']['retry_count']['N']) > 3: # Setting the maximum retry count to 3
                     print(f'SKIP - MAX RETRY COUNT EXCEEDED - {key}')
-                    dynamodb.update_table(
+                    dynamodb.update_item(
                         TableName = table_name,
                         Key = {
                             'etag': {'S': etag}
@@ -94,7 +94,7 @@ def lambda_handler(event, context):
                             ExpressionAttributeValues = {
                                 ':updated_at': {'S': datetime.now(timezone.utc).isoformat()},
                                 ':old_lease_expiry' : {'N': str(int(existing['Item']['lease_expiry']['N']))}, # This prevents two lambda from processing the same file concurrently
-                                ':new_lease_expiry': {'N': str((int(time.time()) + 600))},
+                                ':new_lease_expiry': {'N': str((int(time.time()) + 60))},
                                 ':inc': {'N': '1'}
                             }
                         )
@@ -119,10 +119,27 @@ def process_file(bucket, key, etag):
         try:
             parsed = json.loads(data)
             print(f'File {key} is a valid JSON. Processing completed')
+
+            # Moving the processed file to a their respective folders in the same bucket
+            file_name = key.split('/')[-1]
+
+            if file_name.startswith('order'):
+                new_key = f'validated/orders_events/{file_name}'
+                move_approved_file(bucket, key, new_key)
+
+            elif file_name.startswith('payment'):
+                new_key = f'validated/payments_events/{file_name}'
+                move_approved_file(bucket, key, new_key)
+
+            elif file_name.startswith('user'):
+                new_key = f'validated/user_events/{file_name}'
+                move_approved_file(bucket, key, new_key)
+
             update_table(etag, key)
             
         except json.JSONDecodeError:
             print(f'Malformed JSON')
+            malformed_file_handler(bucket, key, etag)
             raise Exception(f'File {key} is not a valid JSON')
 
     except Exception as e:
@@ -148,6 +165,44 @@ def update_table(etag, key):
             }
         )
         print(f'Update Successful - Status: COMPLETED for file: {key}')
+    except Exception as e:
+        print(f'Error message: {e}')
+        raise e
+    
+def move_approved_file(bucket, key, new_key):
+    try:
+        s3.copy_object(
+            Bucket=bucket, 
+            CopySource={
+                'Bucket': bucket, 
+                'Key': key
+            }, 
+            Key=new_key
+        )
+        s3.delete_object(
+            Bucket=bucket, 
+            Key=key
+        )
+        print(f'File {key} moved to {new_key}')
+    except Exception as e:
+        print(f'Error message: {e}')
+        raise e
+    
+def malformed_file_handler(bucket, key, etag):
+    try:
+        s3.copy_object(
+            Bucket=bucket, 
+            CopySource={
+                'Bucket': bucket, 
+                'Key': key
+            }, 
+            Key=f'rejected/{key.split("/")[-1]}'
+        )
+        s3.delete_object(
+            Bucket=bucket, 
+            Key=key
+        )
+        print(f'Malformed file {key} moved to malformed folder')
     except Exception as e:
         print(f'Error message: {e}')
         raise e
