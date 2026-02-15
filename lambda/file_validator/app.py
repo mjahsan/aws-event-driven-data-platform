@@ -104,27 +104,27 @@ def process_file(bucket, key, etag):
         try:
             parsed = json.loads(data)
             print(f'File {key} is a valid JSON. Processing completed')
-            
+
             # Moving the processed file to a their respective folders in the same bucket
             file_name = key.split('/')[-1]
 
             if file_name.startswith('order'):
                 new_key = f'validated/orders_events/{file_name}'
                 move_validated_file(bucket, key, new_key)
-                update_table(etag, key)
                 sending_to_processing_queue(bucket, new_key, etag)
+                update_table(etag, key)
 
             elif file_name.startswith('payment'):
                 new_key = f'validated/payments_events/{file_name}'
                 move_validated_file(bucket, key, new_key)
-                update_table(etag, key)
                 sending_to_processing_queue(bucket, new_key, etag)
+                update_table(etag, key)
 
             elif file_name.startswith('user'):
                 new_key = f'validated/user_events/{file_name}'
                 move_validated_file(bucket, key, new_key)
-                update_table(etag, key)
                 sending_to_processing_queue(bucket, new_key, etag)
+                update_table(etag, key)
             
         # Catching JSONDecodeError for malformed JSON files and moving them to rejected folder    
         except json.JSONDecodeError:
