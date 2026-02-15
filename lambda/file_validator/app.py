@@ -47,7 +47,7 @@ def lambda_handler(event, context):
                 )
                 
                 # Checks for multiple conditions for the existing etags
-                if existing['Item']['status']['S'] == 'COMPLETED':
+                if existing['Item']['status']['S'] == 'VALIDATED' or existing['Item']['status']['S'] == 'REJECTED':
                     print(f'SKIP - ALREADY PROCESSED - {key}')
                     continue
 
@@ -161,11 +161,11 @@ def update_table(etag, key):
                 '#u': 'updated_at'
             },
             ExpressionAttributeValues = {
-                ':status': {'S': 'COMPLETED'},
+                ':status': {'S': 'VALIDATED'},
                 ':updated_at': {'S': datetime.now(timezone.utc).isoformat()}
             }
         )
-        print(f'Update Successful - Status: COMPLETED for file: {key}')
+        print(f'Update Successful - Status: VALIDATED for file: {key}')
     except Exception as e:
         print(f'Error message: {e}')
         raise e
