@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 s3 = boto3.client('s3')
 dynamodb = boto3.client('dynamodb')
+sqs = boto3.client('sqs')
 
 table_name = 'event-platform-metadata'
 
@@ -103,24 +104,29 @@ def process_file(bucket, key, etag):
         try:
             parsed = json.loads(data)
             print(f'File {key} is a valid JSON. Processing completed')
-
+            
             # Moving the processed file to a their respective folders in the same bucket
             file_name = key.split('/')[-1]
 
             if file_name.startswith('order'):
                 new_key = f'validated/orders_events/{file_name}'
-                move_approved_file(bucket, key, new_key)
+                move_validated_file(bucket, key, new_key)
+                update_table(etag, key)
+                sending_to_processing_queue(bucket, new_key, etag)
 
             elif file_name.startswith('payment'):
                 new_key = f'validated/payments_events/{file_name}'
-                move_approved_file(bucket, key, new_key)
+                move_validated_file(bucket, key, new_key)
+                update_table(etag, key)
+                sending_to_processing_queue(bucket, new_key, etag)
 
             elif file_name.startswith('user'):
                 new_key = f'validated/user_events/{file_name}'
-                move_approved_file(bucket, key, new_key)
-
-            update_table(etag, key)
+                move_validated_file(bucket, key, new_key)
+                update_table(etag, key)
+                sending_to_processing_queue(bucket, new_key, etag)
             
+        # Catching JSONDecodeError for malformed JSON files and moving them to rejected folder    
         except json.JSONDecodeError:
             print(f'Malformed JSON')
             malformed_file_handler(bucket, key, etag)
@@ -170,7 +176,7 @@ def update_table(etag, key):
         print(f'Error message: {e}')
         raise e
     
-def move_approved_file(bucket, key, new_key):
+def move_validated_file(bucket, key, new_key):
     try:
         s3.copy_object(
             Bucket=bucket, 
@@ -204,6 +210,22 @@ def malformed_file_handler(bucket, key, etag):
             Key=key
         )
         print(f'Malformed file {key} moved to malformed folder')
+    except Exception as e:
+        print(f'Error message: {e}')
+        raise e
+    
+def sending_to_processing_queue(bucket, new_key, etag):
+    try:
+        #Passing valid file events to SQS for downstream processing
+        sqs.send_message(
+            QueueUrl = r'https://sqs.<REGION>.amazonaws.com/<ACCOUNT NUMBER>/processing-event-platform-new',
+            MessageBody = json.dumps({
+                'bucket': bucket,
+                'key': new_key,
+                'etag': etag
+            })
+        )
+        print(f'Message sent to SQS for file {new_key}')
     except Exception as e:
         print(f'Error message: {e}')
         raise e

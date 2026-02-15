@@ -19,6 +19,14 @@
             ],
             "Resource": "arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:dlq-event-platform-new"
         },
+	{
+            "Sid": "SQSProcessingQueue",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:SendMessage"
+            ],
+            "Resource": "arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:processing-event-platform-new"
+        },
         {
             "Sid": "S3GetAndDeleteInRaw",
             "Effect": "Allow",
