@@ -1,8 +1,7 @@
 {
-  "Comment": "Event Platform State Machine Orchestrator",
+  "Comment": "Spark job transformation orchestration",
   "StartAt": "ReceiveMessages",
   "States": {
-
     "ReceiveMessages": {
       "Type": "Task",
       "Resource": "arn:aws:states:::aws-sdk:sqs:receiveMessage",
@@ -11,7 +10,6 @@
         "MaxNumberOfMessages": 10,
         "WaitTimeSeconds": 5
       },
-      "ResultPath": "$.sqs",
       "Retry": [
         {
           "ErrorEquals": [
@@ -22,9 +20,9 @@
           "BackoffRate": 2
         }
       ],
+      "ResultPath": "$.sqs",
       "Next": "CheckIfEmpty"
     },
-
     "CheckIfEmpty": {
       "Type": "Choice",
       "Choices": [
@@ -40,7 +38,6 @@
         }
       ]
     },
-
     "TriggerDatabricksJob": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
@@ -51,24 +48,23 @@
       "ResultPath": "$.triggerResult",
       "Next": "WaitforStatusCheck"
     },
-
     "WaitforStatusCheck": {
       "Type": "Wait",
       "Seconds": 60,
       "Next": "CheckDatabricksStatus"
     },
-
     "CheckDatabricksStatus": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
       "Parameters": {
         "FunctionName": "databricks-status-lambda",
-        "Payload.$": "$.triggerResult.Payload.run_id"
+        "Payload": {
+          "run_id.$": "$.triggerResult.Payload.run_id"
+        }
       },
       "ResultPath": "$.statusResult",
       "Next": "JobStatusDecision"
     },
-
     "JobStatusDecision": {
       "Type": "Choice",
       "Choices": [
@@ -80,7 +76,7 @@
         {
           "Variable": "$.statusResult.Payload.status",
           "StringEquals": "SUCCESS",
-          "Next": "PrepareDeleteEntries"
+          "Next": "UpdateDynamoDBStatus"
         },
         {
           "Variable": "$.statusResult.Payload.status",
@@ -89,11 +85,78 @@
         }
       ]
     },
-
+    "UpdateDynamoDBStatus": {
+      "Type": "Map",
+      "ItemsPath": "$.sqs.Messages",
+      "Iterator": {
+        "StartAt": "ParseBody",
+        "States": {
+          "ParseBody": {
+            "Type": "Pass",
+            "Parameters": {
+              "Body.$": "States.StringToJson($.Body)"
+            },
+            "ResultPath": "$.decoded",
+            "Next": "ChangeStatus"
+          },
+          "ChangeStatus": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::aws-sdk:dynamodb:updateItem",
+            "Parameters": {
+              "TableName": "event-platform-metadata",
+              "Key": {
+                "etag": {
+                  "S.$": "$.decoded.Body.etag"
+                }
+              },
+              "UpdateExpression": "Set #status = :newStatus",
+              "ConditionExpression": "#status = :expected",
+              "ExpressionAttributeNames": {
+                "#status": "status"
+              },
+              "ExpressionAttributeValues": {
+                ":newStatus": {
+                  "S": "SILVER_COMPLETED"
+                },
+                ":expected": {
+                  "S": "VALIDATED"
+                }
+              }
+            },
+            "Retry": [
+              {
+                "ErrorEquals": [
+                  "DynamoDB.ProvisionedThroughputExceededException",
+                  "States.Timeout",
+                  "States.TaskFailed"
+                ],
+                "IntervalSeconds": 2,
+                "MaxAttempts": 3,
+                "BackoffRate": 2
+              }
+            ],
+            "Catch": [
+              {
+                "ErrorEquals": ["DynamoDB.ConditionalCheckFailedException"],
+                "Next": "AlreadyUpdated"
+              }
+            ],
+            "ResultPath": null,
+            "End": true
+          },
+          "AlreadyUpdated": {
+            "Type": "Pass",
+            "End": true
+          }
+        }
+      },
+      "ResultPath": null,
+      "Next": "PrepareDeleteEntries"
+    },
+    
     "PrepareDeleteEntries": {
       "Type": "Map",
       "ItemsPath": "$.sqs.Messages",
-      "ResultPath": "$.DeleteEntries",
       "Iterator": {
         "StartAt": "FormatDeleteEntry",
         "States": {
@@ -101,15 +164,15 @@
             "Type": "Pass",
             "Parameters": {
               "Id.$": "$.MessageId",
-              "RecieptHandle.$": "$.RecieptHandle"
+              "ReceiptHandle.$": "$.ReceiptHandle"
             },
             "End": true
           }
         }
       },
+      "ResultPath": "$.deleteEntries",
       "Next": "DeleteMessages"
     },
-
     "DeleteMessages": {
       "Type": "Task",
       "Resource": "arn:aws:states:::aws-sdk:sqs:deleteMessageBatch",
@@ -117,14 +180,22 @@
         "QueueUrl": "https://sqs.<REGION>.amazonaws.com/<ACCOUNT NUMBER>/processing-event-platform-new",
         "Entries.$": "$.deleteEntries"
       },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
       "End": true
     },
-
     "FailState": {
       "Type": "Fail",
       "Cause": "Databricks job failed"
     },
-    
     "Finish": {
       "Type": "Succeed"
     }
