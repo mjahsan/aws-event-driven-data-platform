@@ -112,7 +112,7 @@
 
     "DeleteMessages": {
       "Type": "Task",
-      "Resource": "arn:aws:states:::aws-sdk:sqsdeleteMessageBatch",
+      "Resource": "arn:aws:states:::aws-sdk:sqs:deleteMessageBatch",
       "Parameters": {
         "QueueUrl": "https://sqs.<REGION>.amazonaws.com/<ACCOUNT NUMBER>/processing-event-platform-new",
         "Entries.$": "$.deleteEntries"
