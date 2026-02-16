@@ -1,0 +1,132 @@
+{
+  "Comment": "Event Platform State Machine Orchestrator",
+  "StartAt": "ReceiveMessages",
+  "States": {
+
+    "ReceiveMessages": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:sqs:receiveMessage",
+      "Parameters": {
+        "QueueUrl": "https://sqs.<REGION>.amazonaws.com/<ACCOUNT NUMBER>/processing-event-platform-new",
+        "MaxNumberOfMessages": 10,
+        "WaitTimeSeconds": 5
+      },
+      "ResultPath": "$.sqs",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 5,
+          "BackoffRate": 2
+        }
+      ],
+      "Next": "CheckIfEmpty"
+    },
+
+    "CheckIfEmpty": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.sqs.Messages",
+          "IsPresent": true,
+          "Next": "TriggerDatabricksJob"
+        },
+        {
+          "Variable": "$.sqs.Messages",
+          "IsPresent": false,
+          "Next": "Finish"
+        }
+      ]
+    },
+
+    "TriggerDatabricksJob": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "databricks-trigger-lambda",
+        "Payload.$": "$.sqs.Messages"
+      },
+      "ResultPath": "$.triggerResult",
+      "Next": "WaitforStatusCheck"
+    },
+
+    "WaitforStatusCheck": {
+      "Type": "Wait",
+      "Seconds": 60,
+      "Next": "CheckDatabricksStatus"
+    },
+
+    "CheckDatabricksStatus": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "databricks-status-lambda",
+        "Payload.$": "$.triggerResult.Payload.run_id"
+      },
+      "ResultPath": "$.statusResult",
+      "Next": "JobStatusDecision"
+    },
+
+    "JobStatusDecision": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.statusResult.Payload.status",
+          "StringEquals": "RUNNING",
+          "Next": "WaitforStatusCheck"
+        },
+        {
+          "Variable": "$.statusResult.Payload.status",
+          "StringEquals": "SUCCESS",
+          "Next": "PrepareDeleteEntries"
+        },
+        {
+          "Variable": "$.statusResult.Payload.status",
+          "StringEquals": "FAILED",
+          "Next": "FailState"
+        }
+      ]
+    },
+
+    "PrepareDeleteEntries": {
+      "Type": "Map",
+      "ItemsPath": "$.sqs.Messages",
+      "ResultPath": "$.DeleteEntries",
+      "Iterator": {
+        "StartAt": "FormatDeleteEntry",
+        "States": {
+          "FormatDeleteEntry": {
+            "Type": "Pass",
+            "Parameters": {
+              "Id.$": "$.MessageId",
+              "RecieptHandle.$": "$.RecieptHandle"
+            },
+            "End": true
+          }
+        }
+      },
+      "Next": "DeleteMessages"
+    },
+
+    "DeleteMessages": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:sqsdeleteMessageBatch",
+      "Parameters": {
+        "QueueUrl": "https://sqs.<REGION>.amazonaws.com/<ACCOUNT NUMBER>/processing-event-platform-new",
+        "Entries.$": "$.deleteEntries"
+      },
+      "End": true
+    },
+
+    "FailState": {
+      "Type": "Fail",
+      "Cause": "Databricks job failed"
+    },
+    
+    "Finish": {
+      "Type": "Succeed"
+    }
+  }
+}
