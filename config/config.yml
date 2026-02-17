@@ -62,7 +62,7 @@ dynamodb:
         None
         
 sqs:
-    main_queue:
+    main_queue_for_validation:
         queue_name: 
             event-platform-new
         visibility_timeout_seconds:
@@ -87,7 +87,7 @@ sqs:
         access_policy:
             infra/sqs/main_access_policy.json
     
-    dead_letter_queue:
+    dead_letter_queue_for_validation:
         queue_name: 
             event-platform-new
         visibility_timeout_seconds:
@@ -113,4 +113,3 @@ sqs:
             diabled
         access_policy:
             infra/sqs/main_access_policy.json
-        
