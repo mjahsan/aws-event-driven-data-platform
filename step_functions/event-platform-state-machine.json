@@ -1,5 +1,5 @@
 {
-  "Comment": "Spark job transformation orchestration",
+  "Comment": "Spark job transformation orchestration for Validated to Silver",
   "StartAt": "ReceiveMessages",
   "States": {
     "ReceiveMessages": {
@@ -88,6 +88,8 @@
     "UpdateDynamoDBStatus": {
       "Type": "Map",
       "ItemsPath": "$.sqs.Messages",
+      "ResultPath": null,
+      "Next": "PrepareDeleteEntries",
       "Iterator": {
         "StartAt": "ParseBody",
         "States": {
@@ -137,7 +139,9 @@
             ],
             "Catch": [
               {
-                "ErrorEquals": ["DynamoDB.ConditionalCheckFailedException"],
+                "ErrorEquals": [
+                  "DynamoDB.ConditionalCheckFailedException"
+                ],
                 "Next": "AlreadyUpdated"
               }
             ],
@@ -149,14 +153,13 @@
             "End": true
           }
         }
-      },
-      "ResultPath": null,
-      "Next": "PrepareDeleteEntries"
+      }
     },
-    
     "PrepareDeleteEntries": {
       "Type": "Map",
       "ItemsPath": "$.sqs.Messages",
+      "ResultPath": "$.deleteEntries",
+      "Next": "DeleteMessages",
       "Iterator": {
         "StartAt": "FormatDeleteEntry",
         "States": {
@@ -169,9 +172,7 @@
             "End": true
           }
         }
-      },
-      "ResultPath": "$.deleteEntries",
-      "Next": "DeleteMessages"
+      }
     },
     "DeleteMessages": {
       "Type": "Task",
@@ -187,13 +188,14 @@
           ],
           "IntervalSeconds": 2,
           "MaxAttempts": 3,
-          "BackoffRate": 2
+          "BackoffRate": 3
         }
       ],
       "End": true
     },
     "FailState": {
       "Type": "Fail",
+      "Error": "DatabricksFailure",
       "Cause": "Databricks job failed"
     },
     "Finish": {
