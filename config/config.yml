@@ -85,11 +85,11 @@ sqs:
             maximum_retry_count:
                 3
         access_policy:
-            infra/sqs/main_access_policy.json
+            infra/sqs/main/main_validation_access_policy.json
     
     dead_letter_queue_for_validation:
         queue_name: 
-            event-platform-new
+            dlq-event-platform-new
         visibility_timeout_seconds:
             30
         message_retention_period_days:
@@ -112,4 +112,57 @@ sqs:
         dead_letter_queue:
             diabled
         access_policy:
-            infra/sqs/main_access_policy.json
+            infra/sqs/dlq/dlq_validation_access_policy.json
+
+  
+    main_queue_for_processing_silver_to_gold:
+        queue_name: 
+            processing-event-platform-new
+        visibility_timeout_seconds:
+            360
+        message_retention_period_days:
+            4
+        maximum_message_size:
+            1024
+        delivery_delay_seconds:
+            0
+        recieve_message_wait_time_seconds:
+            0
+        encryption:
+            server-side-enncryption:
+                enabled
+        dead_letter_queue:
+            enabled
+            queue_name:
+                arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:dlq-processing-event-platform-new
+            maximum_retry_count:
+                3
+        access_policy:
+            infra/sqs/main/main_silver_to_gold_access_policy.json
+    
+    dead_letter_queue_for_processing_silver_to_gold:
+        queue_name: 
+            dlq-processing-event-platform-new
+        visibility_timeout_seconds:
+            30
+        message_retention_period_days:
+            4
+        maximum_message_size:
+            1024
+        delivery_delay_seconds:
+            0
+        recieve_message_wait_time_seconds:
+            0
+        encryption:
+            server-side-enncryption:
+                enabled
+        redrive_allow_policy:
+            enabled
+            permission:
+                by_queue
+            queue_name:
+                arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:processing-event-platform-new
+        dead_letter_queue:
+            diabled
+        access_policy:
+            infra/sqs/dlq/dlq_silver_to_gold_access_policy.json 

@@ -1,0 +1,42 @@
+{
+  "Version": "2012-10-17",
+  "Id": "SQSDefaultPolicy",
+  "Statement": [
+    {
+      "Sid": "OwnerStatement",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::<ACCOUNT NUMBER>:root"
+      },
+      "Action": "SQS:*",
+      "Resource": "arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:processing-event-platform-new"
+    },
+    {
+      "Sid": "ValidationLambdaToSendMessage",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "lambda.amazonaws.com"
+      },
+      "Action": "sqs:SendMessage",
+      "Resource": "arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:processing-event-platform-new",
+      "Condition": {
+        "ArnEquals": {
+          "aws:SourceArn": "arn:aws:lambda:<REGION>:<ACCOUNT NUMBER>:function:event-processing-function"
+        }
+      }
+    },
+    {
+      "Sid": "StepFunctionToPollMessage",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "states.amazonaws.com"
+      },
+      "Action": [
+        "sqs:ReceiveMessage",
+        "sqs:DeleteMessage",
+        "sqs:GetQueueAttributes"
+      ],
+      "Resource": "arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:processing-event-platform-new"
+    }
+  ]
+}
