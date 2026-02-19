@@ -166,3 +166,7 @@ sqs:
             diabled
         access_policy:
             infra/sqs/dlq/dlq_silver_to_gold_access_policy.json 
+
+step_functions:
+    state_machine_name:
+        ValidatedToSilverStateMachine
