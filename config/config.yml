@@ -170,3 +170,5 @@ sqs:
 step_functions:
     state_machine_name:
         ValidatedToSilverStateMachine
+    graph:
+        stepfunctions_graph.png
