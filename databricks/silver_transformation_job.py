@@ -66,3 +66,57 @@ df_env = df_env.withColumn("event_date", to_date(col("event_ts")))
 orders_df = df_env.filter(col("event_type") == "order_events")
 payment_df = df_env.filter(col("event_type") == "payment_events")
 user_df = df_env.filter(col("event_type") == "user_events")
+
+#7. Payload extraction per type
+users_df = users_df.select(
+    "file_id",
+    "domain",
+    "source_system",
+    "created_at",
+    "event_id",
+    "event_type",
+    "source",
+    "event_ts",
+    "ingest_ts",
+    "event_date",
+    col("payload.user_id").alias("user_id"),
+    col("payload.email").alias("email"),
+    col("payload.country").alias("country"),
+    col("payload.device").alias("device")
+).filter(col("user_id").isNotNull())
+
+payments_df = payments_df.select(
+    "file_id",
+    "domain",
+    "source_system",
+    "created_at",
+    "event_id",
+    "event_type",
+    "source",
+    "event_ts",
+    "ingest_ts",
+    "event_date",
+    col("payload.payment_id").alias("payment_id"),
+    col("payload.order_id").alias("order_id"),
+    col("payload.amount").cast("decimal(10,2)").alias("amount"),
+    col("payload.currency").alias("currency"),
+    col("payload.failure_reason").alias("failure_reason")
+).filter((col("payment_id").isNotNull()) and (col("amount") >= 0))
+
+orders_df = orders_df.select(
+    "file_id",
+    "domain",
+    "source_system",
+    "created_at",
+    "event_id",
+    "event_type",
+    "source",
+    "event_ts",
+    "ingest_ts",
+    "event_date",
+    col("payload.order_id").alias("order_id"),
+    col("payload.user_id").alias("user_id"),
+    col("payload.amount").cast("decimal(10,2)").alias("amount"),
+    col("payload.currency").alias("currency"),
+    col("payload.status").alias("status")
+).filter(col("order_id").isNotNull())
