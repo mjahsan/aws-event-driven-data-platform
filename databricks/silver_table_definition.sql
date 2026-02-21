@@ -1,6 +1,6 @@
 CREATE CATALOG IF NOT EXISTS demo_catalog;
 
-USE demo_catalog;
+USE CATALOG demo_catalog;
 
 CREATE SCHEMA IF NOT EXISTS demo_catalog.silver;
 
