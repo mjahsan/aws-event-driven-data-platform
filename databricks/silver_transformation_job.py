@@ -62,3 +62,7 @@ if rejected_df_env.count() > 0:
 #5. Adding partition column after filtering non-null rows
 df_env = df_env.withColumn("event_date", to_date(col("event_ts")))
 
+#6. Splitting up by event type
+orders_df = df_env.filter(col("event_type") == "order_events")
+payment_df = df_env.filter(col("event_type") == "payment_events")
+user_df = df_env.filter(col("event_type") == "user_events")
