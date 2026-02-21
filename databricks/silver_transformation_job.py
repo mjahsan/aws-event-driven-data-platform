@@ -120,3 +120,27 @@ orders_df = orders_df.select(
     col("payload.currency").alias("currency"),
     col("payload.status").alias("status")
 ).filter(col("order_id").isNotNull())
+
+#8. Deduplication inside batch before MERGE to drop duplicated within a single file
+users_df = users_df.dropDuplicates(["event_id"])
+payments_df = payments_df.dropDuplicates(["event_id"])
+orders_df = orders_df.dropDuplicates(["event_id"])
+
+#9. Idempotent MERGE function
+def merge_to_silver(df, table_name):
+    if df.isEmpty():
+        return
+    delta_table = DeltaTable.forName(spark, table_name)
+    (
+        delta_table.alias("t").merge(
+            df.alias("s"),
+            "t.event_id = s.event_id"
+        )
+        .whenNotMatchedInsertAll()
+        .execute()
+    )
+
+#10. Executing MERGE
+merge_to_silver(users_df, "demo.catalog.silver.events_user")
+merge_to_silver(payments_df, "demo.catalog.silver.events_payments")
+merge_to_silver(orders_df, "demo.catalog.silver.events_orders")
