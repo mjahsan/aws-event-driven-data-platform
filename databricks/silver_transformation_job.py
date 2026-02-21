@@ -8,6 +8,9 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("silver")
 
+# Use the following to enable schema evolution but it could go dangerous if unmanaged - better to raise error and fix schema as in #7
+# spark.conf.set("spark.databricks.delta.schema.autoMerge.enabled", "true") - # Used in #9
+
 #1. Capturing file paths as one string string and converting it to a list
 dbutils.widgets.text("file_paths", "")
 file_paths = json.loads(dbutils.widgets.get("file_paths"))
@@ -67,7 +70,7 @@ orders_df = df_env.filter(col("event_type") == "order_events")
 payment_df = df_env.filter(col("event_type") == "payment_events")
 user_df = df_env.filter(col("event_type") == "user_events")
 
-#7. Payload extraction per type
+#7. Payload extraction per type along with the management of unexpected schema change
 users_df = users_df.select(
     "file_id",
     "domain",
@@ -84,6 +87,12 @@ users_df = users_df.select(
     col("payload.country").alias("country"),
     col("payload.device").alias("device")
 ).filter(col("user_id").isNotNull())
+
+expected_fields_user = {"user_id", "email", "country", "device"}
+actual_fields_user = set(df_env.select("payload.*").columns)
+unexpected_fields_user = actual_fields - expected_fields
+if unexpected_fields_user:
+    raise Exception (f"Unexpected payload fields detected: {unexpected_fields_user}")
 
 payments_df = payments_df.select(
     "file_id",
@@ -103,6 +112,12 @@ payments_df = payments_df.select(
     col("payload.failure_reason").alias("failure_reason")
 ).filter((col("payment_id").isNotNull()) and (col("amount") >= 0))
 
+expected_fields_payment = {"payment_id", "order_id", "amount", "currency", "failure_reason"}
+actual_fields_payment = set(df_env.select("payload.*").columns)
+unexpected_fields_payment = actual_fields - expected_fields
+if unexpected_fields_payment:
+    raise Exception (f"Unexpected payload fields detected: {unexpected_fields_payment}")
+
 orders_df = orders_df.select(
     "file_id",
     "domain",
@@ -121,6 +136,12 @@ orders_df = orders_df.select(
     col("payload.status").alias("status")
 ).filter(col("order_id").isNotNull())
 
+expected_fields_order = {"order_id", "user_id", "amount", "currency", "status"}
+actual_fields_order = set(df_env.select("payload.*").columns)
+unexpected_fields_order = actual_fields - expected_fields
+if unexpected_fields_order:
+    raise Exception (f"Unexpected payload fields detected: {unexpected_fields_order}")
+
 #8. Deduplication inside batch before MERGE to drop duplicated within a single file
 users_df = users_df.dropDuplicates(["event_id"])
 payments_df = payments_df.dropDuplicates(["event_id"])
@@ -137,6 +158,7 @@ def merge_to_silver(df, table_name):
             "t.event_id = s.event_id"
         )
         .whenNotMatchedInsertAll()
+        #.whenMatchedUpdateAll() - Use this for evolving schema but dangerous if it goes unmanaged. Better to go with the method mentioned in #7
         .execute()
     )
 
