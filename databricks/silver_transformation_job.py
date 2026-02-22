@@ -34,7 +34,9 @@ rejected_container_df = raw_df.filter(
     col("file_id").isNull() |
     col("domain").isNull() |
     col("source_system").isNull() |
-    col("created_at").isNull()
+    col("created_at").isNull() |
+    col("events").isNull() |
+    (size(col("events")) == 0)
 ).select(
     col("file_id"),
     col("domain"),
@@ -47,7 +49,9 @@ rejected_container_df = raw_df.filter(
         when(col("file_id").isNull(), lit("MISSING_FILE_ID")),
         when(col("domain").isNull(), lit("MISSING_DOMAIN")),
         when(col("source_system").isNull(), lit("MISSING_SOURCE_SYSTEM")),
-        when(col("created_at").isNull(), lit("MISSING_CREATION_TIME"))
+        when(col("created_at").isNull(), lit("MISSING_CREATION_TIME")),
+        when(col("events").isNull(), lit("MISSING_CREATION_TIME")),
+        when(col("events").isNull() | (size(col("events")) == 0), lit("EMPTY_EVENTS"))
     ).alias("rejection_reason"),
     to_json(struct("*")).alias("raw_event_json"),
     current_timestamp().alias("rejection_ts")
@@ -79,7 +83,9 @@ rejected_env_df = df_cont.filter(
     col("event.event_type").isNull() |
     col("event.event_ts").isNull() |
     col("event.source").isNull() |
-    col("event.ingest_ts").isNull()
+    col("event.ingest_ts").isNull() |
+    col("event.ingest_ts") < col ("event.event_ts") |
+    col("event.event_ts") > current_timestamp()
 ).select(
     col("file_id"),
     col("domain"),
@@ -93,7 +99,9 @@ rejected_env_df = df_cont.filter(
         when(col("event.event_type").isNull(), lit("MISSING_EVENT_TYPE")),
         when(col("event.event_ts").isNull(), lit("MISSING_EVENT_TIMESTAMP")),
         when(col("event.source").isNull(), lit("MISSING_SOURCE")),
-        when(col("event.ingest_ts").isNull(), lit("MISSING_INGEST_TIMESTAMP"))
+        when(col("event.ingest_ts").isNull(), lit("MISSING_INGEST_TIMESTAMP")),
+        when(col("event.ingest_ts") < col ("event.event_ts"), lit("EVENT_IS_GREATER_TO_INGEST_TIMESTAMP")),
+        when(col("event.event_ts") > current_timestamp(), lit("EVENT_TIMESTAMP_IN_FUTURE")),
     ).alias("rejection_reason"),
     to_json(col("event")).alias("raw_event_json"),
     current_timestamp().alias("rejection_ts")
@@ -108,7 +116,9 @@ df_env = df_cont.filter(
     col("event.event_type").isNotNull() &
     col("event.event_ts").isNotNull() &
     col("event.source").isNotNull() &
-    col("event.ingest_ts").isNotNull()
+    col("event.ingest_ts").isNotNull() &
+    col("event.ingest_ts") >= col ("event.event_ts") &
+    col("event.event_ts") <= current_timestamp()
 ).select(
     col("file_id"),
     col("domain"),
@@ -358,7 +368,7 @@ if not orders_df.rdd.isEmpty():
 #-----------------------------------------------
 metrics = {
     "total_events": df_cont.count(),
-    "valid_events": users_df.count() + payments_df.count() + order_df.count(),
+    "valid_events": users_df.count() + payments_df.count() + orders_df.count(),
     "rejected_events": (
         rejected_container_df.count() +
         rejected_env_df.count() +
@@ -370,14 +380,14 @@ metrics = {
     )
 }
 
-if metrics["rejected_events"] == 0:
-    batch_status = "SUCCESS"
 if metrics["valid_events"] == 0:
     batch_status = "FAILED"
+elif metrics["rejected_events"] == 0:
+    batch_status = "SUCCESS"
 else:
     batch_status = "PARTIAL_SUCCESS"
     
 dbutils.notebook.exit(json.dumps({
-    "status" : batch_status
+    "status" : batch_status,
     "metrics" : metrics
 }))
