@@ -3,7 +3,7 @@ from pysparl.sql.types import *
 from delta.tables import DeltaTable
 import json
 
-# Logging setup
+# Initial setup
 # Use the following to enable schema evolution but it could go dangerous if unmanaged - better to raise error and fix schema as in #7
 # spark.conf.set("spark.databricks.delta.schema.autoMerge.enabled", "true") - # Used in MERGE function
 
@@ -17,14 +17,44 @@ if not file_paths:
 # Reading the JSON files from the list of paths 
 raw_df = spark.read.option("multiLine", True).json(file_paths)
 
-# Basic file-level validation
+# Basic file-level validation: Check for missing columns
 required_cols = ["file_id", "domain", "source_system", "created_at", "events"]
 missing_cols = [c for c in required_cols if c not in raw_df.columns]
 if missing_cols:
     raise ValueError(f"Missing required columns:{missing_cols}")
 
-# Flatten container
-df_flat = raw_df.select(
+# Basic file-level validation: Check for nulls and extracting them to rejected table
+rejected_container_df = raw_df.filer(
+    col("file_id").isNull |
+    col("domain").isNull |
+    col("source_system").isNull |
+    col("created_at").isNull
+).select(
+    col("file_id"),
+    col("domain"),
+    col("source_system"),
+    col("created_at"),
+    lit(None).alias("event_id"),
+    lit(None).alias("event_type"),
+    when(col("file_id").isNull, lit("MISSING_FILE_ID"))
+        .when(col("domain").isNull, lit("MISSING_DOMAIN"))
+        .when(col("source_system").isNull, lit("MISSING_SOURCE_SYSTEM"))
+        .when(col("created_at").isNull, lit("MISSING_CREATION_TIME"))
+        .alias("rejection_reason),
+    to_json(struct("*")).alias("raw_event_json"),
+    current_timestamp().alias("rejection_ts")
+).withColumn("rejection_date", to_date(col("rejection_ts")))
+
+if not rejected_container_df.isEmpty():
+    rejected_df_env.write.mode("append").saveAsTable("demo_catalog.silver.rejected_events")
+
+# Flatten approved container
+df_flat = raw_df.filer(
+    col("file_id").isNotNull &
+    col("domain").isNotNull &
+    col("source_system").isNotNull &
+    col("created_at").isNotNull
+).select(
     col("file_id"),
     col("domain"),
     col("source_system"),
@@ -32,7 +62,31 @@ df_flat = raw_df.select(
     explode("events").alias("event")
 )
 
-#3. Flatten event envelope
+# Basic envelope-level validation: Check for nulls and extracting them to rejected table
+rejected_df_env = df_flat.filter(
+    col("event.event_id").isNull() |
+    col("event.event_type").isNull() |
+    col("event.event_ts").isNull() |
+    col("event.source").isNull() |
+    col("event.ingest_ts").isNull()
+).select(
+    col("file_id"),
+    col("domain"),
+    col("source_system"),
+    col("created_at"),
+    col("event.event_id").alias("event_id"),
+    col("event.event_type").alias("event_type"),
+    when(col("event_id").isNull, lit("MISSING_EVENT_ID"))
+        .when(col("event_type").isNull, lit("MISSING_EVENT_TYPE"))
+        .when(col("event_ts").isNull, lit("MISSING_EVENT_TIMESTAMP"))
+        .when(col("source").isNull, lit("MISSING_SOURCE"))
+        .when(col("ingest_ts").isNull, lit("MISSING_INGEST_TIMESTAMP"))
+        .alias("rejection_reason),
+    to_json(col("event.event")).alias("raw_event_json"),
+    current_timestamp().alias("rejection_ts")
+).withColumn("rejection_date", to_date(col("rejection_ts")))
+
+# Flatten approved envelope
 df_env = df_flat.select(
     "file_id",
     "domain",
@@ -45,26 +99,6 @@ df_env = df_flat.select(
     col("event.ingest_ts").alias("ingest_ts"),
     explode("event.payload").alias("payload")
 )
-
-# Extracting records with missing values - Rejected Records
-rejected_df_env = df_flat.filter(
-    col("event.event_id").isNull() |
-    col("event.event_type").isNull() |
-    col("event.event_ts").isNull()
-).select(
-    col("file_id"),
-    col("domain"),
-    col("source_system"),
-    col("created_at"),
-    col("event.event_id"),
-    col("event.event_type"),
-    col("event.source"),
-    col("event.event_ts"),
-    col("event.ingest_ts"),
-    lit("MISSING_REQUIRED_ENVELOPE_FIELDS").alias("rejecion_reason"),
-    to_json(col("payload")).alias("raw_event_json"),
-    current_timestamp().alias("rejection_ts")
-).withColumn("rejection_date", to_date(col("rejection_ts")))
 
 if not rejected_df_env.isEmpty():
     rejected_df_env.write.mode("append").saveAsTable("demo_catalog.silver.rejected_events")
