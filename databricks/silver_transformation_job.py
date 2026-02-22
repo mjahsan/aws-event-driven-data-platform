@@ -110,7 +110,7 @@ rejected_env_df = df_cont.filter(
 if not rejected_env_df.isEmpty():
     rejected_env_df.write.mode("append").saveAsTable("demo_catalog.bronze.rejected_events")
 
-# Flatten approved envelope
+# Flatten approved envelopes
 df_env = df_cont.filter(
     col("event.event_id").isNotNull() &
     col("event.event_type").isNotNull() &
