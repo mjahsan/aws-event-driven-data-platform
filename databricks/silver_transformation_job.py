@@ -147,7 +147,22 @@ valid_types = ["user_events", "payment_events", "order_events"]
 
 invalid_type_df = df_env.filter(
     ~col("event_type").isin(valid_types)
-)
+).select(
+    col("file_id"),
+    col("domain"),
+    col("source_system"),
+    col("created_at"),
+    col("event_id"),
+    col("event_type"),
+    lit("INVALID_EVENT_TYPE").alias("rejection_reason"),
+    to_json(struct("event_id", "event_type", "source", "event_ts","ingest_ts","payload")).alias("raw_event_json"),
+    current_timestamp().alias("rejection_ts")
+).withColumn("rejection_date", to_date(col("rejection_ts")))
+
+if not invalid_type_df.isEmpty():
+    invalid_type_df.write.mode("append").saveAsTable("demo_catalog.bronze.rejected_events")
+
+df_env = df_env.filter(col("event_type").isin(valid_types))
 
 # Splitting up by event type
 user_df = df_env.filter(col("event_type") == "user_events")
@@ -158,21 +173,24 @@ order_df = df_env.filter(col("event_type") == "order_events")
 # 4. DOMAIN-LEVEL VALIDATION AND PROCESSING
 #-----------------------------------------------
 # Handling schema evolution
-users_expected_fields = {"user_id", "email", "country", "device"}
-users_actual_fields = set(users_df.select("payload.*").columns)
-users_unexpected_fields = users_actual_fields - users_expected_fields
+if user_df.limit(1).count() > 0:
+    users_expected_fields = {"user_id", "email", "country", "device"}
+    users_actual_fields = set(users_df.select("payload.*").columns)
+    users_unexpected_fields = users_actual_fields - users_expected_fields
 if users_unexpected_fields:
     raise Exception (f"Unexpected field(s) detected: {users_unexpected_fields}")
 
-payments_expected_fields = {"payment_id", "order_id", "amount", "currency", "failure_reason"}
-payments_actual_fields = set(payments_df.select("payload.*").columns)
-payments_unexpected_fields = payments_actual_fields - payments_expected_fields
+if payment_df.limit(1).count() > 0:
+    payments_expected_fields = {"payment_id", "order_id", "amount", "currency", "failure_reason"}
+    payments_actual_fields = set(payments_df.select("payload.*").columns)
+    payments_unexpected_fields = payments_actual_fields - payments_expected_fields
 if payments_unexpected_fields:
     raise Exception (f"Unexpected field(s) detected: {payments_unexpected_fields}")
 
-orders_expected_fields = {"user_id", "order_id", "amount", "currency", "status"}
-orders_actual_fields = set(orders_df.select("payload.*").columns)
-orders_unexpected_fields = orders_actual_fields - orders_expected_fields
+if order_df.limit(1).count() > 0:
+    orders_expected_fields = {"user_id", "order_id", "amount", "currency", "status"}
+    orders_actual_fields = set(orders_df.select("payload.*").columns)
+    orders_unexpected_fields = orders_actual_fields - orders_expected_fields
 if orders_unexpected_fields:
     raise Exception (f"Unexpected field(s) detected: {orders_unexpected_fields}")
 
@@ -328,9 +346,38 @@ def merge_to_silver(df, table_name):
     )
 
 # Executing MERGE
-if users_df.limit(1).count()>0:
+if not users_df.rdd.isEmpty():
     merge_to_silver(users_df, "demo_catalog.silver.events_user")
-if payments_df.limit(1).count()>0:
+if not payments_df.rdd.isEmpty():
     merge_to_silver(payments_df, "demo_catalog.silver.events_payment")
-if orders_df.limit(1).count()>0:
+if not orders_df.rdd.isEmpty():
     merge_to_silver(orders_df, "demo_catalog.silver.events_order")
+    
+#-----------------------------------------------
+# 5. METRIC COUNTS
+#-----------------------------------------------
+metrics = {
+    "total_events": df_cont.count(),
+    "valid_events": users_df.count() + payments_df.count() + order_df.count(),
+    "rejected_events": (
+        rejected_container_df.count() +
+        rejected_env_df.count() +
+        users_rejected_df.count() +
+        payments_rejected_df.count() +
+        orders_rejected_df.count() +
+        domain_mismatch_df.count() +
+        invalid_type_df.count()
+    )
+}
+
+if metrics["rejected_events"] == 0:
+    batch_status = "SUCCESS"
+if metrics["valid_events"] == 0:
+    batch_status = "FAILED"
+else:
+    batch_status = "PARTIAL_SUCCESS"
+    
+dbutils.notebook.exit(json.dumps({
+    "status" : batch_status
+    "metrics" : metrics
+}))
