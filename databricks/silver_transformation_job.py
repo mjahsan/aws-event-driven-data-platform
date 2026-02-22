@@ -3,17 +3,23 @@ from pysparl.sql.types import *
 from delta.tables import DeltaTable
 import json
 
+#-----------------------------------------------
+# 1. PARAMETERS DECLARATION
+#-----------------------------------------------
 # Initial setup
 # Use the following to enable schema evolution but it could go dangerous if unmanaged - better to raise error and fix schema as in #7
 # spark.conf.set("spark.databricks.delta.schema.autoMerge.enabled", "true") - # Used in MERGE function
 
-#1. Capturing file paths as one string string and converting it to a list
+# Capturing file paths as one string string and converting it to a list
 dbutils.widgets.text("file_paths", "")
 file_paths = json.loads(dbutils.widgets.get("file_paths"))
 
 if not file_paths:
     raise ValueError("No file paths provided to Silver job")
-
+    
+#-----------------------------------------------
+# 2. FILE-LEVEL VALIDATION AND PROCESSING
+#-----------------------------------------------
 # Reading the JSON files from the list of paths 
 raw_df = spark.read.option("multiLine", True).json(file_paths)
 
@@ -49,7 +55,7 @@ if not rejected_container_df.isEmpty():
     rejected_df_env.write.mode("append").saveAsTable("demo_catalog.silver.rejected_events")
 
 # Flatten approved container
-df_flat = raw_df.filer(
+df_cont = raw_df.filer(
     col("file_id").isNotNull &
     col("domain").isNotNull &
     col("source_system").isNotNull &
@@ -62,8 +68,11 @@ df_flat = raw_df.filer(
     explode("events").alias("event")
 )
 
+#-----------------------------------------------
+# 3. ENVELOPE-LEVEL VALIDATION AND PROCESSING
+#-----------------------------------------------
 # Basic envelope-level validation: Check for nulls and extracting them to rejected table
-rejected_df_env = df_flat.filter(
+rejected_env_df = df_flat.filter(
     col("event.event_id").isNull() |
     col("event.event_type").isNull() |
     col("event.event_ts").isNull() |
@@ -82,29 +91,19 @@ rejected_df_env = df_flat.filter(
         .when(col("source").isNull, lit("MISSING_SOURCE"))
         .when(col("ingest_ts").isNull, lit("MISSING_INGEST_TIMESTAMP"))
         .alias("rejection_reason),
-    to_json(col("event.event")).alias("raw_event_json"),
+    to_json(col("event")).alias("raw_event_json"),
     current_timestamp().alias("rejection_ts")
 ).withColumn("rejection_date", to_date(col("rejection_ts")))
 
+if not rejected_env_df.isEmpty():
+    rejected_env_df.write.mode("append").saveAsTable("demo_catalog.silver.rejected_events")
+
 # Flatten approved envelope
-df_env = df_flat.select(
-    "file_id",
-    "domain",
-    "source_system",
-    "created_at",
-    col("event.event_id").alias("event_id"),
-    col("event.event_type").alias("event_type"),
-    col("event.source").alias("source"),
-    col("event.event_ts").alias("event_ts"),
-    col("event.ingest_ts").alias("ingest_ts"),
-    explode("event.payload").alias("payload")
-)
-
-if not rejected_df_env.isEmpty():
-    rejected_df_env.write.mode("append").saveAsTable("demo_catalog.silver.rejected_events")
-
-# Flatten event envelope
-df_env = df_flat.select(
+df_env = df_cont.filter(
+    col("event_id").isNotNull() &
+    col("event_type").isNotNull() &
+    col("event_ts").isNotNull()
+).select(
     col("file_id"),
     col("domain"),
     col("source_system"),
@@ -117,15 +116,9 @@ df_env = df_flat.select(
     col("event.payload").alias("payload")
 )
 
-# Envelope-level validation data quality check:
-df_valid_env = df_env.filter(
-    col("event_id").isNotNull() &
-    col("event_type").isNotNull() &
-    col("event_ts").isNotNull()
-)
 
 # Adding partition column after filtering non-null rows
-df_env = df_valid_env.withColumn("event_date", to_date(col("event_ts")))
+df_env = df_env.withColumn("event_date", to_date(col("event_ts")))
 
 # Splitting up by event type
 order_df = df_env.filter(col("event_type") == "order_events")
@@ -133,7 +126,9 @@ payment_df = df_env.filter(col("event_type") == "payment_events")
 user_df = df_env.filter(col("event_type") == "user_events")
 
 # Payload extraction per type along with the management of unexpected schema change
-users_expected_df = user_df.select(
+users_expected_df = user_df.filter(
+    col("user_id").isNotNull()
+).select(
     "file_id",
     "domain",
     "source_system",
@@ -148,7 +143,7 @@ users_expected_df = user_df.select(
     col("payload.email").alias("email"),
     col("payload.country").alias("country"),
     col("payload.device").alias("device")
-).filter(col("user_id").isNotNull())
+)
 
 expected_fields_user = {"user_id", "email", "country", "device"}
 actual_fields_user = set(user_df.select("payload.*").columns)
