@@ -20,8 +20,22 @@ if not file_paths:
 #-----------------------------------------------
 # 2. VALIDATION ENGINE
 #-----------------------------------------------
-def process_rejections (df, condition,   
-    
+def process_rejections (rejected_df, reject_reason, raw_json_expr):
+    if rejected_df.take(1):
+        df_to_write = rejected_df.select(
+            col("file_id"),
+            col("domain"),
+            col("source_system"),
+            col("created_at"),
+            (col("event.event_id") if "events" in rejected_df.columns else col("event_id")).alias("event_id"),
+            (col("event.event_type") if "events" in rejected_df.columns else col("event_type")).alias("event_type"),
+            reject_reason.alias("rejection_reason"),
+            raw_json_expr.alias("raw_event_json"),
+            current_timestamp().alias("rejection_ts")
+        ).withColumn("rejection_date", to_date(col("rejection_ts")))
+
+    # Writing the rejected table to the rejection table
+    df_to_write.write.mode("append").saveAsTable("demo_catalog.bronze.rejected_events")
     
 #-----------------------------------------------
 # 2. FILE-LEVEL VALIDATION AND PROCESSING
@@ -36,34 +50,26 @@ if missing_cols:
     raise ValueError(f"Missing required columns:{missing_cols}")
 
 # Basic file-level validation: Check for nulls and extracting them to rejected table
-rejected_container_df = raw_df.filter(
+bad_cont_cond = 
     col("file_id").isNull() |
     col("domain").isNull() |
     col("source_system").isNull() |
     col("created_at").isNull() |
     col("events").isNull() |
-    (size(col("events")) == 0)
-).select(
-    col("file_id"),
-    col("domain"),
-    col("source_system"),
-    col("created_at"),
-    lit(None).alias("event_id"),
-    lit(None).alias("event_type"),
+    (size(col("events")) == 0
+
+process_rejections(
+    raw_df.filter(bad_cont_cond), 
     concat_ws(
         ",",
         when(col("file_id").isNull(), lit("MISSING_FILE_ID")),
         when(col("domain").isNull(), lit("MISSING_DOMAIN")),
         when(col("source_system").isNull(), lit("MISSING_SOURCE_SYSTEM")),
         when(col("created_at").isNull(), lit("MISSING_CREATION_TIME")),
-        when(col("events").isNull(), lit("MISSING_CREATION_TIME")),
         when(col("events").isNull() | (size(col("events")) == 0), lit("EMPTY_EVENTS"))
-    ).alias("rejection_reason"),
-    to_json(struct("*")).alias("raw_event_json"),
-    current_timestamp().alias("rejection_ts")
-).withColumn("rejection_date", to_date(col("rejection_ts")))
-
-rejected_container_df.write.mode("append").saveAsTable("demo_catalog.bronze.rejected_events")
+    ),
+    to_json(struct("*"))
+)
 
 # Flatten approved container
 df_cont = raw_df.filter(
@@ -83,7 +89,7 @@ df_cont = raw_df.filter(
 # 3. ENVELOPE-LEVEL VALIDATION AND PROCESSING
 #-----------------------------------------------
 # Basic envelope-level validation: Check for nulls and extracting them to rejected table
-rejected_env_df = df_cont.filter(
+bad_env_cond= 
     col("event.event_id").isNull() |
     col("event.event_type").isNull() |
     col("event.event_ts").isNull() |
@@ -91,13 +97,9 @@ rejected_env_df = df_cont.filter(
     col("event.ingest_ts").isNull() |
     col("event.ingest_ts") < col ("event.event_ts") |
     col("event.event_ts") > current_timestamp()
-).select(
-    col("file_id"),
-    col("domain"),
-    col("source_system"),
-    col("created_at"),
-    col("event.event_id").alias("event_id"),
-    col("event.event_type").alias("event_type"),
+
+process_rejections(
+    df_cont.filter(bad_env_cond),
     concat_ws(
         ",",
         when(col("event.event_id").isNull(), lit("MISSING_EVENT_ID")),
@@ -107,12 +109,9 @@ rejected_env_df = df_cont.filter(
         when(col("event.ingest_ts").isNull(), lit("MISSING_INGEST_TIMESTAMP")),
         when(col("event.ingest_ts") < col ("event.event_ts"), lit("EVENT_IS_GREATER_TO_INGEST_TIMESTAMP")),
         when(col("event.event_ts") > current_timestamp(), lit("EVENT_TIMESTAMP_IN_FUTURE")),
-    ).alias("rejection_reason"),
-    to_json(col("event")).alias("raw_event_json"),
-    current_timestamp().alias("rejection_ts")
-).withColumn("rejection_date", to_date(col("rejection_ts")))
-
-rejected_env_df.write.mode("append").saveAsTable("demo_catalog.bronze.rejected_events")
+    ),
+    to_json(col("event"))
+)
 
 # Flatten approved envelopes
 df_env = df_cont.filter(
@@ -137,42 +136,27 @@ df_env = df_cont.filter(
 ).withColumn("event_date", to_date(col("event_ts")))
 
 # Handling domain mismatch
-domain_mismatch_df = df_env.filter(
-    col("domain") != col("event_type")
-).select(
-    col("file_id"),
-    col("domain"),
-    col("source_system"),
-    col("created_at"),
-    col("event_id"),
-    col("event_type"),
-    lit("DOMAIN_EVENT_TYPE_MISMATCH").alias("rejection_reason"),
-    to_json(struct("event_id", "event_type", "source", "event_ts","ingest_ts","payload")).alias("raw_event_json"),
-    current_timestamp().alias("rejection_ts")
-).withColumn("rejection_date", to_date(col("rejection_ts")))
+domain_mismatch_cond = col("domain") != col("event_type")
 
-domain_mismatch_df.write.mode("append").saveAsTable("demo_catalog.bronze.rejected_events")
+process_rejections(
+    df_env.filter(domain_mismatch_cond),
+    lit("DOMAIN_EVENT_TYPE_MISMATCH"),
+    to_json(struct("event_id", "event_type", "source", "event_ts","ingest_ts","payload")),
+    current_timestamp().alias("rejection_ts")
+)
 
 df_env = df_env.filter(col("domain") == col("event_type"))
 
 # Handling invalid event_type
 valid_types = ["user_events", "payment_events", "order_events"]
 
-invalid_type_df = df_env.filter(
-    ~col("event_type").isin(valid_types)
-).select(
-    col("file_id"),
-    col("domain"),
-    col("source_system"),
-    col("created_at"),
-    col("event_id"),
-    col("event_type"),
-    lit("INVALID_EVENT_TYPE").alias("rejection_reason"),
-    to_json(struct("event_id", "event_type", "source", "event_ts","ingest_ts","payload")).alias("raw_event_json"),
+invalid_type_cond = ~col("event_type").isin(valid_types)
+process_rejections(
+    df_env.filter(invalid_type_cond),
+    lit("INVALID_EVENT_TYPE"),
+    to_json(struct("event_id", "event_type", "source", "event_ts","ingest_ts","payload")),
     current_timestamp().alias("rejection_ts")
-).withColumn("rejection_date", to_date(col("rejection_ts")))
-
-invalid_type_df.write.mode("append").saveAsTable("demo_catalog.bronze.rejected_events")
+)
 
 df_env = df_env.filter(col("event_type").isin(valid_types))
 
