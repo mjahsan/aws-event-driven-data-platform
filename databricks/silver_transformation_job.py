@@ -21,17 +21,34 @@ if not file_paths:
 # 2. VALIDATION ENGINE
 #-----------------------------------------------
 def process_rejections (rejected_df, reject_reason, raw_json_expr):
-    if rejected_df.take(1):
-        df_to_write = rejected_df.select(
-            col("file_id"),
-            col("domain"),
-            col("source_system"),
-            col("created_at"),
-            (col("event.event_id") if "events" in rejected_df.columns else col("event_id")).alias("event_id"),
-            (col("event.event_type") if "events" in rejected_df.columns else col("event_type")).alias("event_type"),
-            reject_reason.alias("rejection_reason"),
-            raw_json_expr.alias("raw_event_json"),
-            current_timestamp().alias("rejection_ts")
+    if not rejected_df.take(1):
+        return
+        
+    cols = rejected_df.columns
+    
+    if "event" in cols:
+        # ENVELOPE LEVEL: event is a struct, use its subfields
+        e_id = col("event.event_id")
+        e_type = col("event.event_type")
+     elif "event_id" in cols:
+        # DOMAIN LEVEL: event_id is already flattened
+        e_id = col("event_id")
+        e_type = col("event_type")
+    else:
+        # CONTAINER LEVEL: No events exist yet, use None
+        e_id = lit(None)
+        e_type = lit(None)
+        
+    df_to_write = rejected_df.select(
+        col("file_id"),
+        col("domain"),
+        col("source_system"),
+        col("created_at"),
+        e_id.alias("event_id"),
+        e.type.alias("event_type"),
+        reject_reason.alias("rejection_reason"),
+        raw_json_expr.alias("raw_event_json"),
+        current_timestamp().alias("rejection_ts")
         ).withColumn("rejection_date", to_date(col("rejection_ts")))
 
     # Writing the rejected table to the rejection table
@@ -237,8 +254,7 @@ process_rejections(
 
 # Payload extraction per type
 def common_fields ():
-    return df.select(
-    col("file_id"),
+    return col("file_id"),
     col("domain"),
     col("source_system"),
     col("created_at"),
@@ -246,8 +262,7 @@ def common_fields ():
     col("event_type"),
     col("source"),
     col("event_ts"),
-    col("ingest_ts"),
-    )
+    col("ingest_ts")
     
 users_payload_df = user_df.select(
     common_fields,
