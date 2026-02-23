@@ -18,6 +18,12 @@ if not file_paths:
     raise ValueError("No file paths provided to Silver job")
     
 #-----------------------------------------------
+# 2. VALIDATION ENGINE
+#-----------------------------------------------
+def process_rejections (df, condition,   
+    
+    
+#-----------------------------------------------
 # 2. FILE-LEVEL VALIDATION AND PROCESSING
 #-----------------------------------------------
 # Reading the JSON files from the list of paths 
@@ -57,8 +63,7 @@ rejected_container_df = raw_df.filter(
     current_timestamp().alias("rejection_ts")
 ).withColumn("rejection_date", to_date(col("rejection_ts")))
 
-if not rejected_container_df.isEmpty():
-    rejected_container_df.write.mode("append").saveAsTable("demo_catalog.bronze.rejected_events")
+rejected_container_df.write.mode("append").saveAsTable("demo_catalog.bronze.rejected_events")
 
 # Flatten approved container
 df_cont = raw_df.filter(
@@ -107,8 +112,7 @@ rejected_env_df = df_cont.filter(
     current_timestamp().alias("rejection_ts")
 ).withColumn("rejection_date", to_date(col("rejection_ts")))
 
-if not rejected_env_df.isEmpty():
-    rejected_env_df.write.mode("append").saveAsTable("demo_catalog.bronze.rejected_events")
+rejected_env_df.write.mode("append").saveAsTable("demo_catalog.bronze.rejected_events")
 
 # Flatten approved envelopes
 df_env = df_cont.filter(
@@ -147,8 +151,7 @@ domain_mismatch_df = df_env.filter(
     current_timestamp().alias("rejection_ts")
 ).withColumn("rejection_date", to_date(col("rejection_ts")))
 
-if not domain_mismatch_df.isEmpty():
-    domain_mismatch_df.write.mode("append").saveAsTable("demo_catalog.bronze.rejected_events")
+domain_mismatch_df.write.mode("append").saveAsTable("demo_catalog.bronze.rejected_events")
 
 df_env = df_env.filter(col("domain") == col("event_type"))
 
@@ -169,8 +172,7 @@ invalid_type_df = df_env.filter(
     current_timestamp().alias("rejection_ts")
 ).withColumn("rejection_date", to_date(col("rejection_ts")))
 
-if not invalid_type_df.isEmpty():
-    invalid_type_df.write.mode("append").saveAsTable("demo_catalog.bronze.rejected_events")
+invalid_type_df.write.mode("append").saveAsTable("demo_catalog.bronze.rejected_events")
 
 df_env = df_env.filter(col("event_type").isin(valid_types))
 
@@ -219,8 +221,7 @@ users_rejected_df = users_df.filter(
     current_timestamp().alias("rejection_ts")
 ).withColumn("rejection_date", to_date(col("rejection_ts")))
 
-if not users_rejected_df.isEmpty():
-    users_rejected_df.write.mode("append").saveAsTable("demo_catalog.bronze.rejected_events")
+users_rejected_df.write.mode("append").saveAsTable("demo_catalog.bronze.rejected_events")
 
 payments_rejected_df = payments_df.filter(
     col("payload.payment_id").isNull() |
@@ -243,8 +244,7 @@ payments_rejected_df = payments_df.filter(
     current_timestamp().alias("rejection_ts")
 ).withColumn("rejection_date", to_date(col("rejection_ts")))
 
-if not payments_rejected_df.isEmpty():
-    payments_rejected_df.write.mode("append").saveAsTable("demo_catalog.bronze.rejected_events")
+payments_rejected_df.write.mode("append").saveAsTable("demo_catalog.bronze.rejected_events")
 
 orders_rejected_df = orders_df.filter(
     col("payload.order_id").isNull() |
@@ -267,21 +267,11 @@ orders_rejected_df = orders_df.filter(
     current_timestamp().alias("rejection_ts")
 ).withColumn("rejection_date", to_date(col("rejection_ts")))
 
-if not orders_rejected_df.isEmpty():
-    orders_rejected_df.write.mode("append").saveAsTable("demo_catalog.bronze.rejected_events")
+orders_rejected_df.write.mode("append").saveAsTable("demo_catalog.bronze.rejected_events")
 
 # Payload extraction per type
 users_payload_df = user_df.select(
-    "file_id",
-    "domain",
-    "source_system",
-    "created_at",
-    "event_id",
-    "event_type",
-    "source",
-    "event_ts",
-    "ingest_ts",
-    "event_date",
+    "*",
     col("payload.user_id").alias("user_id"),
     col("payload.email").alias("email"),
     col("payload.country").alias("country"),
@@ -289,16 +279,7 @@ users_payload_df = user_df.select(
 )
 
 payments_payload_df = payment_df.select(
-    "file_id",
-    "domain",
-    "source_system",
-    "created_at",
-    "event_id",
-    "event_type",
-    "source",
-    "event_ts",
-    "ingest_ts",
-    "event_date",
+    "*",
     col("payload.payment_id").alias("payment_id"),
     col("payload.order_id").alias("order_id"),
     col("payload.amount").cast("decimal(10,2)").alias("amount"),
@@ -307,16 +288,7 @@ payments_payload_df = payment_df.select(
 )
 
 orders_payload_df = order_df.select(
-    "file_id",
-    "domain",
-    "source_system",
-    "created_at",
-    "event_id",
-    "event_type",
-    "source",
-    "event_ts",
-    "ingest_ts",
-    "event_date",
+    "*",
     col("payload.order_id").alias("order_id"),
     col("payload.user_id").alias("user_id"),
     col("payload.amount").cast("decimal(10,2)").alias("amount"),
@@ -356,11 +328,11 @@ def merge_to_silver(df, table_name):
     )
 
 # Executing MERGE
-if not users_df.rdd.isEmpty():
+if users_df.take(1):
     merge_to_silver(users_df, "demo_catalog.silver.events_user")
-if not payments_df.rdd.isEmpty():
+if payments_df.take(1):
     merge_to_silver(payments_df, "demo_catalog.silver.events_payment")
-if not orders_df.rdd.isEmpty():
+if orders_df.take(1):
     merge_to_silver(orders_df, "demo_catalog.silver.events_order")
     
 #-----------------------------------------------
