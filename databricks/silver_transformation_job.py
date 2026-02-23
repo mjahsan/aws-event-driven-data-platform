@@ -195,7 +195,31 @@ contract_fields = {
         "order_events": {"user_id", "order_id", "amount", "currency", "status"}
 }
 
-def validate_contract(df, event_type, expected_contract_fields):
+# Payload structure definition for downstream if the payload is null or string or invalid
+valid_user_payload_struct = StructType([
+    StructField("user_id", StringType(), True),
+    StructField("email", StringType(), True),
+    StructField("country", StringType(), True),
+    StructField("device", StringType(), True),
+])
+
+valid_payment_payload_struct = StructType([
+    StructField("payment_id", StringType(), True),
+    StructField("order_id", StringType(), True),
+    StructField("amount", DecimalType(10,2), True),
+    StructField("currency", StringType(), True),
+    StructField("failure_reason", StringType(), True)
+])
+
+valid_order_payload_struct = StructType([
+    StructField("user_id", StringType(), True),
+    StructField("order_id", StringType(), True),
+    StructField("amount", DecimalType(10,2), True),
+    StructField("currency", StringType(), True),
+    StructField("status", StringType(), True)
+])
+
+def validate_contract(df, event_type, expected_contract_fields, payload_struct):
     payload_field = [f for f in df.schema.fields if f.name == "payload"][0]
     
     if isinstance(payload_field.dataType, NullType):
@@ -204,7 +228,9 @@ def validate_contract(df, event_type, expected_contract_fields):
             lit("PAYLOAD_IS_NULL"),
             col("payload")
         )
-        return df.sparkSession.createDataFrame([], df.schema)
+        safe_fields = [f for f in df.schema.fields if f.name != "payload"]
+        safe_fields.append(StructField("payload", payload_struct, True))
+        return df.sparkSession.createDataFrame([], StructType(safe_fields))
         
     elif isinstance(payload_field.dataType, StringType):
         process_rejections(
@@ -212,7 +238,9 @@ def validate_contract(df, event_type, expected_contract_fields):
             lit("PAYLOAD_IS_A_STRING"),
             col("payload")
         )
-        return df.sparkSession.createDataFrame([], df.schema)
+        safe_fields = [f for f in df.schema.fields if f.name != "payload"]
+        safe_fields.append(StructField("payload", payload_struct, True))
+        return df.sparkSession.createDataFrame([], StructType(safe_fields))
         
     elif isinstance(payload_field.dataType, StructType):
         actual_fields = {f.name for f in payload_field.dataType.fields}
@@ -227,11 +255,13 @@ def validate_contract(df, event_type, expected_contract_fields):
             lit("PAYLOAD_IS_INVALID"),
             col("payload")
         )
-        return df.sparkSession.createDataFrame([], df.schema)
+        safe_fields = [f for f in df.schema.fields if f.name != "payload"]
+        safe_fields.append(StructField("payload", payload_struct, True))
+        return df.sparkSession.createDataFrame([], StructType(safe_fields))
 
-user_df = validate_contract(user_df, "user_events", contract_fields["user_events"])
-payment_df = validate_contract(payment_df, "payment_events", contract_fields["payment_events"])
-order_df = validate_contract(order_df, "order_events", contract_fields["order_events"])
+users_df = validate_contract(user_df, "user_events", contract_fields["user_events"], valid_user_payload_struct)
+payments_df = validate_contract(payment_df, "payment_events", contract_fields["payment_events"], valid_payment_payload_struct)
+orders_df = validate_contract(order_df, "order_events", contract_fields["order_events"], valid_order_payload_struct)
 
 # Captruing null values and extracting them to rejected tables
 users_rejected_cond = col("payload.user_id").isNull()
@@ -304,7 +334,7 @@ def common_fields ():
     col("ingest_ts")
     ]
     
-users_payload_df = user_df.select(
+users_payload_df = users_df.select(
     *common_fields(),
     col("payload.user_id").alias("user_id"),
     col("payload.email").alias("email"),
@@ -312,7 +342,7 @@ users_payload_df = user_df.select(
     col("payload.device").alias("device")
 )
 
-payments_payload_df = payment_df.select(
+payments_payload_df = payments_df.select(
     *common_fields(),
     col("payload.payment_id").alias("payment_id"),
     col("payload.order_id").alias("order_id"),
@@ -321,7 +351,7 @@ payments_payload_df = payment_df.select(
     col("payload.failure_reason").alias("failure_reason")
 )
 
-orders_payload_df = order_df.select(
+orders_payload_df = orders_df.select(
     *common_fields(),
     col("payload.order_id").alias("order_id"),
     col("payload.user_id").alias("user_id"),
