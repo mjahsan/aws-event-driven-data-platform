@@ -76,8 +76,7 @@ bad_cont_cond = (
     col("domain").isNull() |
     col("source_system").isNull() |
     col("created_at").isNull() |
-    col("events").isNull() |
-    (size(col("events"))) == 0
+    col("events").isNull() | (size(col("events"))) == 0
 )
 
 container_reject_count = process_rejections(
@@ -130,7 +129,7 @@ envelope_reject_count = process_rejections(
                                 when(col("event.event_ts").isNull(), lit("MISSING_EVENT_TIMESTAMP")),
                                 when(col("event.source").isNull(), lit("MISSING_SOURCE")),
                                 when(col("event.ingest_ts").isNull(), lit("MISSING_INGEST_TIMESTAMP")),
-                                when(col("event.ingest_ts") < col ("event.event_ts"), lit("EVENT_IS_GREATER_TO_INGEST_TIMESTAMP")),
+                                when(col("event.ingest_ts") < col ("event.event_ts"), lit("INGEST BEFORE EVENT_TIMESTAMP")),
                                 when(col("event.event_ts") > current_timestamp(), lit("EVENT_TIMESTAMP_IN_FUTURE")),
                             ),
                             to_json(col("event"))
@@ -191,6 +190,8 @@ order_df = df_env.filter(col("event_type") == "order_events")
 # 5. DOMAIN-LEVEL VALIDATION AND PROCESSING
 #-----------------------------------------------
 # Handling schema evolution
+
+users_unexpected_fields = set()
 if user_df.limit(1).count() > 0:
     users_expected_fields = {"user_id", "email", "country", "device"}
     users_actual_fields = set(users_df.select("payload.*").columns)
@@ -198,6 +199,7 @@ if user_df.limit(1).count() > 0:
 if users_unexpected_fields:
     raise Exception (f"Unexpected field(s) detected: {users_unexpected_fields}")
 
+payments_unexpected_fields = set()
 if payment_df.limit(1).count() > 0:
     payments_expected_fields = {"payment_id", "order_id", "amount", "currency", "failure_reason"}
     payments_actual_fields = set(payments_df.select("payload.*").columns)
@@ -205,6 +207,7 @@ if payment_df.limit(1).count() > 0:
 if payments_unexpected_fields:
     raise Exception (f"Unexpected field(s) detected: {payments_unexpected_fields}")
 
+orders_unexpected_fields = set()
 if order_df.limit(1).count() > 0:
     orders_expected_fields = {"user_id", "order_id", "amount", "currency", "status"}
     orders_actual_fields = set(orders_df.select("payload.*").columns)
@@ -226,7 +229,7 @@ users_df = users_df.filter(col("payload.user_id").isNotNull())
 payments_rejected_cond = (
     col("payload.payment_id").isNull() |
     col("payload.order_id").isNull() |
-    col("payload.amount") <= 0
+    col("payload.amount") < 0
 )
 
 payments_reject_count = process_rejections(
@@ -235,7 +238,7 @@ payments_reject_count = process_rejections(
                                 ",",
                                 when(col("payload.payment_id").isNull(), lit("MISSING_PAYMENT_ID")),
                                 when(col("payload.order_id").isNull(), lit("MISSING_ORDER_ID")),
-                                when(col("payload.amount") <= 0, lit("INVALID AMOUNT"))
+                                when(col("payload.amount") < 0, lit("INVALID AMOUNT"))
                             ),
                             to_json(col("payload")).alias("raw_event_json"),
                         )
@@ -243,13 +246,13 @@ payments_reject_count = process_rejections(
 payments_df = payments_df.filter(
                 col("payload.payment_id").isNotNull() & 
                 col("payload.order_id").isNotNull() & 
-                col("payload.amount").isNotNull()
+                col("payload.amount") >= 0
               )
 
 orders_rejected_cond = (
     col("payload.order_id").isNull() |
     col("payload.user_id").isNull() |
-    col("payload.amount") <= 0
+    col("payload.amount") < 0
 )
 
 orders_reject_count = process_rejections(
@@ -258,7 +261,7 @@ orders_reject_count = process_rejections(
                             ",",
                             when(col("payload.user_id").isNull(), lit("MISSING_USER_ID")),
                             when(col("payload.order_id").isNull(), lit("MISSING_ORDER_ID")),
-                            when(col("payload.amount") <= 0, lit("INVALID AMOUNT"))
+                            when(col("payload.amount") < 0, lit("INVALID AMOUNT"))
                         ),
                         to_json(col("payload")).alias("raw_event_json")
                      )
@@ -266,7 +269,7 @@ orders_reject_count = process_rejections(
 orders_df = orders_df.filter(
                 col("payload.order_id").isNotNull() & 
                 col("payload.user_id").isNotNull() & 
-                col("payload.amount").isNotNull()
+                col("payload.amount") >= 0
               )
 
 # Payload extraction per type
@@ -309,11 +312,6 @@ orders_payload_df = order_df.select(
     col("payload.status").alias("status")
 )
 
-# Dropping Duplicates
-users_df = users_payload_df.dropDuplicates(["event_id"])
-payments_df = payments_payload_df.dropDuplicates(["event_id"])
-orders_df = orders_payload_df.dropDuplicates(["event_id"])
-    
 #-----------------------------------------------
 # 6. MERGE TO DELTA TABLE
 #-----------------------------------------------
@@ -331,12 +329,12 @@ def merge_to_silver(df, table_name):
     )
 
 # Executing MERGE
-if users_df.take(1):
-    merge_to_silver(users_df, "demo_catalog.silver.events_user")
-if payments_df.take(1):
-    merge_to_silver(payments_df, "demo_catalog.silver.events_payment")
-if orders_df.take(1):
-    merge_to_silver(orders_df, "demo_catalog.silver.events_order")
+if users_payload_df.take(1):
+    merge_to_silver(users_payload_df, "demo_catalog.silver.events_user")
+if payments_payload_df.take(1):
+    merge_to_silver(payments_payload_df, "demo_catalog.silver.events_payment")
+if orders_payload_df.take(1):
+    merge_to_silver(orders_payload_df, "demo_catalog.silver.events_order")
     
 #-----------------------------------------------
 # 7. METRIC COUNTS
