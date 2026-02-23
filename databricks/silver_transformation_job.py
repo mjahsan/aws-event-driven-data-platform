@@ -22,7 +22,7 @@ if not file_paths:
 #-----------------------------------------------
 def process_rejections (rejected_df, reject_reason, raw_json_expr):
     if not rejected_df.take(1):
-        return
+        return 0
         
     cols = rejected_df.columns
     
@@ -30,7 +30,7 @@ def process_rejections (rejected_df, reject_reason, raw_json_expr):
         # ENVELOPE LEVEL: event is a struct, use its subfields
         e_id = col("event.event_id")
         e_type = col("event.event_type")
-     elif "event_id" in cols:
+    elif "event_id" in cols:
         # DOMAIN LEVEL: event_id is already flattened
         e_id = col("event_id")
         e_type = col("event_type")
@@ -45,14 +45,18 @@ def process_rejections (rejected_df, reject_reason, raw_json_expr):
         col("source_system"),
         col("created_at"),
         e_id.alias("event_id"),
-        e.type.alias("event_type"),
+        e_type.alias("event_type"),
         reject_reason.alias("rejection_reason"),
         raw_json_expr.alias("raw_event_json"),
         current_timestamp().alias("rejection_ts")
         ).withColumn("rejection_date", to_date(col("rejection_ts")))
 
+    count = df_to_write.count()
+    
     # Writing the rejected table to the rejection table
     df_to_write.write.mode("append").saveAsTable("demo_catalog.bronze.rejected_events")
+    
+    return count
     
 #-----------------------------------------------
 # 3. FILE-LEVEL VALIDATION AND PROCESSING
@@ -73,21 +77,21 @@ bad_cont_cond = (
     col("source_system").isNull() |
     col("created_at").isNull() |
     col("events").isNull() |
-    (size(col("events")) == 0
+    (size(col("events"))) == 0
 )
 
-process_rejections(
-    raw_df.filter(bad_cont_cond), 
-    concat_ws(
-        ",",
-        when(col("file_id").isNull(), lit("MISSING_FILE_ID")),
-        when(col("domain").isNull(), lit("MISSING_DOMAIN")),
-        when(col("source_system").isNull(), lit("MISSING_SOURCE_SYSTEM")),
-        when(col("created_at").isNull(), lit("MISSING_CREATION_TIME")),
-        when(col("events").isNull() | (size(col("events")) == 0), lit("EMPTY_EVENTS"))
-    ),
-    to_json(struct("*"))
-)
+container_reject_count = process_rejections(
+                            raw_df.filter(bad_cont_cond), 
+                            concat_ws(
+                                ",",
+                                when(col("file_id").isNull(), lit("MISSING_FILE_ID")),
+                                when(col("domain").isNull(), lit("MISSING_DOMAIN")),
+                                when(col("source_system").isNull(), lit("MISSING_SOURCE_SYSTEM")),
+                                when(col("created_at").isNull(), lit("MISSING_CREATION_TIME")),
+                                when(col("events").isNull() | (size(col("events")) == 0), lit("EMPTY_EVENTS"))
+                            ),
+                            to_json(struct("*"))
+                        )
 
 # Flatten approved container
 df_cont = raw_df.filter(
@@ -117,20 +121,20 @@ bad_env_cond= (
     col("event.event_ts") > current_timestamp()
 )
 
-process_rejections(
-    df_cont.filter(bad_env_cond),
-    concat_ws(
-        ",",
-        when(col("event.event_id").isNull(), lit("MISSING_EVENT_ID")),
-        when(col("event.event_type").isNull(), lit("MISSING_EVENT_TYPE")),
-        when(col("event.event_ts").isNull(), lit("MISSING_EVENT_TIMESTAMP")),
-        when(col("event.source").isNull(), lit("MISSING_SOURCE")),
-        when(col("event.ingest_ts").isNull(), lit("MISSING_INGEST_TIMESTAMP")),
-        when(col("event.ingest_ts") < col ("event.event_ts"), lit("EVENT_IS_GREATER_TO_INGEST_TIMESTAMP")),
-        when(col("event.event_ts") > current_timestamp(), lit("EVENT_TIMESTAMP_IN_FUTURE")),
-    ),
-    to_json(col("event"))
-)
+envelope_reject_count = process_rejections(
+                            df_cont.filter(bad_env_cond),
+                            concat_ws(
+                                ",",
+                                when(col("event.event_id").isNull(), lit("MISSING_EVENT_ID")),
+                                when(col("event.event_type").isNull(), lit("MISSING_EVENT_TYPE")),
+                                when(col("event.event_ts").isNull(), lit("MISSING_EVENT_TIMESTAMP")),
+                                when(col("event.source").isNull(), lit("MISSING_SOURCE")),
+                                when(col("event.ingest_ts").isNull(), lit("MISSING_INGEST_TIMESTAMP")),
+                                when(col("event.ingest_ts") < col ("event.event_ts"), lit("EVENT_IS_GREATER_TO_INGEST_TIMESTAMP")),
+                                when(col("event.event_ts") > current_timestamp(), lit("EVENT_TIMESTAMP_IN_FUTURE")),
+                            ),
+                            to_json(col("event"))
+                        )
 
 # Flatten approved envelopes
 df_env = df_cont.filter(
@@ -157,25 +161,24 @@ df_env = df_cont.filter(
 # Handling domain mismatch
 domain_mismatch_cond = col("domain") != col("event_type")
 
-process_rejections(
-    df_env.filter(domain_mismatch_cond),
-    lit("DOMAIN_EVENT_TYPE_MISMATCH"),
-    to_json(struct("event_id", "event_type", "source", "event_ts","ingest_ts","payload")),
-    current_timestamp().alias("rejection_ts")
-)
-
+domain_reject_count = process_rejections(
+                        df_env.filter(domain_mismatch_cond),
+                        lit("DOMAIN_EVENT_TYPE_MISMATCH"),
+                        to_json(struct("event_id", "event_type", "source", "event_ts","ingest_ts","payload"))
+                      )
+                    
 df_env = df_env.filter(col("domain") == col("event_type"))
 
 # Handling invalid event_type
 valid_types = ["user_events", "payment_events", "order_events"]
 
 invalid_type_cond = ~col("event_type").isin(valid_types)
-process_rejections(
-    df_env.filter(invalid_type_cond),
-    lit("INVALID_EVENT_TYPE"),
-    to_json(struct("event_id", "event_type", "source", "event_ts","ingest_ts","payload")),
-    current_timestamp().alias("rejection_ts")
-)
+
+invalid_reject_count = process_rejections(
+                            df_env.filter(invalid_type_cond),
+                            lit("INVALID_EVENT_TYPE"),
+                            to_json(struct("event_id", "event_type", "source", "event_ts","ingest_ts","payload"))
+                        )
 
 df_env = df_env.filter(col("event_type").isin(valid_types))
 
@@ -212,11 +215,13 @@ if orders_unexpected_fields:
 # Captruing null values and extracting them to rejected tables
 users_rejected_cond = col("payload.user_id").isNull()
 
-process_rejections(
-    users_df.filter(user_rejected_cond),
-    lit("MISSING_USER_ID").alias("rejection_reason"),
-    to_json(col("payload")).alias("raw_event_json")
-)
+users_reject_count = process_rejections(
+                        users_df.filter(user_rejected_cond),
+                        lit("MISSING_USER_ID").alias("rejection_reason"),
+                        to_json(col("payload")).alias("raw_event_json")
+                    )
+
+users_df = users_df.filter(col("payload.user_id").isNotNull())
 
 payments_rejected_cond = (
     col("payload.payment_id").isNull() |
@@ -224,16 +229,22 @@ payments_rejected_cond = (
     col("payload.amount") <= 0
 )
 
-process_rejections(
-    payments_df.filter(payments_rejected_cond),
-    concat_ws(
-        ",",
-        when(col("payload.payment_id").isNull(), lit("MISSING_PAYMENT_ID")),
-        when(col("payload.order_id").isNull(), lit("MISSING_ORDER_ID")),
-        when(col("payload.amount") <= 0, lit("INVALID AMOUNT"))
-    ),
-    to_json(col("payload")).alias("raw_event_json"),
-)
+payments_reject_count = process_rejections(
+                            payments_df.filter(payments_rejected_cond),
+                            concat_ws(
+                                ",",
+                                when(col("payload.payment_id").isNull(), lit("MISSING_PAYMENT_ID")),
+                                when(col("payload.order_id").isNull(), lit("MISSING_ORDER_ID")),
+                                when(col("payload.amount") <= 0, lit("INVALID AMOUNT"))
+                            ),
+                            to_json(col("payload")).alias("raw_event_json"),
+                        )
+
+payments_df = payments_df.filter(
+                col("payload.payment_id").isNotNull() & 
+                col("payload.order_id").isNotNull() & 
+                col("payload.amount").isNotNull()
+              )
 
 orders_rejected_cond = (
     col("payload.order_id").isNull() |
@@ -241,20 +252,27 @@ orders_rejected_cond = (
     col("payload.amount") <= 0
 )
 
-process_rejections(
-    orders_df.filter(orders_rejected_cond),
-    concat_ws(
-        ",",
-        when(col("payload.user_id").isNull(), lit("MISSING_USER_ID")),
-        when(col("payload.order_id").isNull(), lit("MISSING_ORDER_ID")),
-        when(col("payload.amount") <= 0, lit("INVALID AMOUNT"))
-    ),
-    to_json(col("payload")).alias("raw_event_json")
-)
+orders_reject_count = process_rejections(
+                        orders_df.filter(orders_rejected_cond),
+                        concat_ws(
+                            ",",
+                            when(col("payload.user_id").isNull(), lit("MISSING_USER_ID")),
+                            when(col("payload.order_id").isNull(), lit("MISSING_ORDER_ID")),
+                            when(col("payload.amount") <= 0, lit("INVALID AMOUNT"))
+                        ),
+                        to_json(col("payload")).alias("raw_event_json")
+                     )
+
+orders_df = orders_df.filter(
+                col("payload.order_id").isNotNull() & 
+                col("payload.user_id").isNotNull() & 
+                col("payload.amount").isNotNull()
+              )
 
 # Payload extraction per type
 def common_fields ():
-    return col("file_id"),
+    return [
+    col("file_id"),
     col("domain"),
     col("source_system"),
     col("created_at"),
@@ -263,9 +281,10 @@ def common_fields ():
     col("source"),
     col("event_ts"),
     col("ingest_ts")
+    ]
     
 users_payload_df = user_df.select(
-    common_fields,
+    *common_fields(),
     col("payload.user_id").alias("user_id"),
     col("payload.email").alias("email"),
     col("payload.country").alias("country"),
@@ -273,7 +292,7 @@ users_payload_df = user_df.select(
 )
 
 payments_payload_df = payment_df.select(
-    common_fields,
+    *common_fields(),
     col("payload.payment_id").alias("payment_id"),
     col("payload.order_id").alias("order_id"),
     col("payload.amount").cast("decimal(10,2)").alias("amount"),
@@ -282,7 +301,7 @@ payments_payload_df = payment_df.select(
 )
 
 orders_payload_df = order_df.select(
-    common_fields,
+    *common_fields(),
     col("payload.order_id").alias("order_id"),
     col("payload.user_id").alias("user_id"),
     col("payload.amount").cast("decimal(10,2)").alias("amount"),
@@ -290,20 +309,10 @@ orders_payload_df = order_df.select(
     col("payload.status").alias("status")
 )
 
-# Approved domain values
-users_df = users_payload_df.filter(
-    col("user_id").isNotNull()
-).dropDuplicates(["event_id"])
-payments_df = payments_payload_df.filter(
-    col("payment_id").isNotNull() &
-    col("order_id").isNotNull() &
-    col("amount") > 0
-).dropDuplicates(["event_id"])
-orders_df = orders_payload_df.filter(
-    col("order_id").isNotNull() &
-    col("user_id").isNotNull() &
-    col("amount") > 0
-).dropDuplicates(["event_id"])
+# Dropping Duplicates
+users_df = users_payload_df.dropDuplicates(["event_id"])
+payments_df = payments_payload_df.dropDuplicates(["event_id"])
+orders_df = orders_payload_df.dropDuplicates(["event_id"])
     
 #-----------------------------------------------
 # 6. MERGE TO DELTA TABLE
@@ -335,15 +344,7 @@ if orders_df.take(1):
 metrics = {
     "total_events": df_cont.count(),
     "valid_events": users_df.count() + payments_df.count() + orders_df.count(),
-    "rejected_events": (
-        rejected_container_df.count() +
-        rejected_env_df.count() +
-        users_rejected_df.count() +
-        payments_rejected_df.count() +
-        orders_rejected_df.count() +
-        domain_mismatch_df.count() +
-        invalid_type_df.count()
-    )
+    "rejected_events": container_reject_count + envelope_reject_count + domain_reject_count + invalid_reject_count + users_reject_count + payments_reject_count + orders_reject_count
 }
 
 if metrics["valid_events"] == 0:
