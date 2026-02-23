@@ -21,8 +21,6 @@ if not file_paths:
 # 2. VALIDATION ENGINE
 #-----------------------------------------------
 def process_rejections (rejected_df, reject_reason, raw_json_expr):
-    if not rejected_df.take(1):
-        return 0
         
     cols = rejected_df.columns
     
@@ -106,6 +104,8 @@ df_cont = raw_df.filter(
     explode("events").alias("event")
 )
 
+df_cont = df_cont.persist()
+
 #-----------------------------------------------
 # 4. ENVELOPE-LEVEL VALIDATION AND PROCESSING
 #-----------------------------------------------
@@ -157,6 +157,8 @@ df_env = df_cont.filter(
     col("event.payload").alias("payload")
 ).withColumn("event_date", to_date(col("event_ts")))
 
+df_env = df_env.persist()
+
 # Handling domain mismatch
 domain_mismatch_cond = col("domain") != col("event_type")
 
@@ -192,7 +194,6 @@ order_df = df_env.filter(col("event_type") == "order_events")
 # Handling schema evolution
 
 users_unexpected_fields = set()
-if user_df.limit(1).count() > 0:
     users_expected_fields = {"user_id", "email", "country", "device"}
     users_actual_fields = set(users_df.select("payload.*").columns)
     users_unexpected_fields = users_actual_fields - users_expected_fields
@@ -200,7 +201,6 @@ if users_unexpected_fields:
     raise Exception (f"Unexpected field(s) detected: {users_unexpected_fields}")
 
 payments_unexpected_fields = set()
-if payment_df.limit(1).count() > 0:
     payments_expected_fields = {"payment_id", "order_id", "amount", "currency", "failure_reason"}
     payments_actual_fields = set(payments_df.select("payload.*").columns)
     payments_unexpected_fields = payments_actual_fields - payments_expected_fields
@@ -208,7 +208,6 @@ if payments_unexpected_fields:
     raise Exception (f"Unexpected field(s) detected: {payments_unexpected_fields}")
 
 orders_unexpected_fields = set()
-if order_df.limit(1).count() > 0:
     orders_expected_fields = {"user_id", "order_id", "amount", "currency", "status"}
     orders_actual_fields = set(orders_df.select("payload.*").columns)
     orders_unexpected_fields = orders_actual_fields - orders_expected_fields
@@ -294,6 +293,8 @@ users_payload_df = user_df.select(
     col("payload.device").alias("device")
 )
 
+users_payload_df = users_payload_df.persist()
+
 payments_payload_df = payment_df.select(
     *common_fields(),
     col("payload.payment_id").alias("payment_id"),
@@ -303,6 +304,8 @@ payments_payload_df = payment_df.select(
     col("payload.failure_reason").alias("failure_reason")
 )
 
+payments_payload_df = payments_payload_df.persist()
+
 orders_payload_df = order_df.select(
     *common_fields(),
     col("payload.order_id").alias("order_id"),
@@ -311,6 +314,8 @@ orders_payload_df = order_df.select(
     col("payload.currency").alias("currency"),
     col("payload.status").alias("status")
 )
+
+orders_payload_df = orders_payload_df.persist()
 
 #-----------------------------------------------
 # 6. MERGE TO DELTA TABLE
@@ -341,7 +346,7 @@ if orders_payload_df.take(1):
 #-----------------------------------------------
 metrics = {
     "total_events": df_cont.count(),
-    "valid_events": users_df.count() + payments_df.count() + orders_df.count(),
+    "valid_events": users_payload_df.count() + payments_payload_df.count() + orders_payload_df.count(),
     "rejected_events": container_reject_count + envelope_reject_count + domain_reject_count + invalid_reject_count + users_reject_count + payments_reject_count + orders_reject_count
 }
 
