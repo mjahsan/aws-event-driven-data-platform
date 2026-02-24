@@ -1,3 +1,4 @@
+'''Schema and tables for silver layer'''
 CREATE CATALOG IF NOT EXISTS demo_catalog;
 
 USE CATALOG demo_catalog;
@@ -69,3 +70,25 @@ CREATE TABLE IF NOT EXISTS silver.events_order (
 )
 USING DELTA
 PARTITIONED BY (event_date);
+
+'''Schema and table for reject layer'''
+CREATE SCHEMA IF NOT EXISTS demo_catalog.bronze;
+
+DROP TABLE IF EXISTS bronze.rejected_events;
+
+CREATE TABLE IF NOT EXISTS bronze.rejected_events (
+  file_id STRING,
+  domain STRING,
+  source_system STRING,
+  created_at TIMESTAMP,
+  etag STRING,
+  event_id STRING, 
+  event_type STRING, 
+  rejection_reason STRING,
+  raw_event_json STRING,
+  rejection_ts TIMESTAMP,
+  rejection_date DATE,
+  reject_hash STRING
+)
+USING DELTA
+PARTITIONED BY (rejection_date);
