@@ -12,12 +12,18 @@ from functools import reduce
 # spark.conf.set("spark.databricks.delta.schema.autoMerge.enabled", "true") - # Used in MERGE function (Section 5)
 spark.conf.set("spark.sql.shuffle.partitions", "20")
 
-# Capturing file paths as one string string and converting it to a list
+# Capturing metadata (ETag and file paths) for the incoming files as one string string and converting it to a list
 dbutils.widgets.text("file_paths", "")
-file_paths = json.loads(dbutils.widgets.get("file_paths"))
+file_metadata = json.loads(dbutils.widgets.get("file_metadata"))
 
 if not file_paths:
     raise ValueError("No file paths provided to Silver job")
+
+# Extracting the file paths seperately
+file_paths = [f["file_path"] for f in file_metadata]
+
+# Creating ETag mapping DataFrame
+etag_mapping_df = spark.createDataFrame(file_metadata)
     
 #-----------------------------------------------
 # 2. VALIDATION ENGINE
@@ -57,7 +63,8 @@ def process_rejections (rejected_df, reject_reason, raw_json_expr):
 # 3. FILE-LEVEL VALIDATION AND PROCESSING
 #-----------------------------------------------
 # Reading the JSON files from the list of paths 
-raw_df = spark.read.option("multiLine", True).json(file_paths)
+raw_df = spark.read.option("multiLine", True).json(file_paths)\
+            .withColumn("
 
 # Basic file-level validation: Check for missing columns
 required_cols = ["file_id", "domain", "source_system", "created_at", "events"]
@@ -363,6 +370,11 @@ orders_payload_df = orders_df.select(
 #-----------------------------------------------
 # 6. MERGE TO DELTA TABLE
 #-----------------------------------------------
+# Repartitioning to reduce skewness
+users_payload_df = users_payload_df.repartition(20, "event_id")
+payments_payload_df = payments_payload_df.repartition(20, "event_id")
+orders_payload_df = orders_payload_df.repartition(20, "event_id")
+
 # Idempotent MERGE function
 def merge_to_silver(df, table_name):
     delta_table = DeltaTable.forName(spark, table_name)
