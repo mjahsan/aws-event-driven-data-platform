@@ -71,7 +71,12 @@ def process_rejections (rejected_df, reject_reason, raw_json_expr):
 raw_df = spark.read.option("multiLine", True).json(file_paths)\
             .withColumn("file_path", input_file_name())
             
-raw_df = raw_df.join(etag_mapping_df, "file_path", left)
+raw_df = raw_df.join(etag_mapping_df, "file_path", "left")
+
+df_all_events = raw_df.select(
+    col("etag"),
+    explode_outer("events").alias("events")
+)
 
 # Basic file-level validation: Check for missing columns
 required_cols = ["file_id", "domain", "source_system", "created_at", "events"]
@@ -172,16 +177,16 @@ df_env = df_cont.filter(
 
 df_env = df_env.persist()
 
-# Handling domain mismatch - Extra safety but for this project event_type is indeed different than the domain name as event_type demonstrates the status of it's respective type
-#domain_mismatch_cond = col("domain") != col("event_type")
+# Handling domain mismatch
+domain_mismatch_cond = col("domain") != col("event_type")
 
-#process_rejections(
-#    df_env.filter(domain_mismatch_cond),
-#    lit("DOMAIN_EVENT_TYPE_MISMATCH"),
-#    to_json(struct("event_id", "event_type", "source", "event_ts","ingest_ts","payload"))
-#)
+process_rejections(
+    df_env.filter(domain_mismatch_cond),
+    lit("DOMAIN_EVENT_TYPE_MISMATCH"),
+    to_json(struct("event_id", "event_type", "source", "event_ts","ingest_ts","payload"))
+)
                     
-#df_env = df_env.filter(col("domain") == col("event_type"))
+df_env = df_env.filter(col("domain") == col("event_type"))
 
 # Handling invalid event_type
 valid_types = ["user_events", "payment_events", "order_events"]
@@ -402,24 +407,30 @@ def merge_to_silver(df, table_name):
 merge_to_silver(users_payload_df, "demo_catalog.silver.events_user")
 merge_to_silver(payments_payload_df, "demo_catalog.silver.events_payment")
 merge_to_silver(orders_payload_df, "demo_catalog.silver.events_order")
-    
+
+total_events_df = df_all_events.groupBy("etag").agg(count("*").alias("total_events"))
+
 # Updating reject table
 if rejected_dfs:
     final_rejections = reduce(lambda a, b: a.unionByName(b), rejected_dfs)
     final_rejections = final_rejections.persist()
     final_rejections.write.mode("append").saveAsTable("demo_catalog.bronze.rejected_events")
+    rejected_events_df = final_rejections.groupBy("etag").agg(count("*").alias("rejected_events"))
 else:
-    print("No rejections")
+    rejected_events_df = spark.createDataFrame(
+        [], 
+        total_events_df.select("etag").withColumn(
+            "rejected_events", lit(0)
+        ).schema
+    )
 
 #-----------------------------------------------
 # 7. METRIC COUNTS
 #-----------------------------------------------
-total_events = df_cont.groupBy("etag").agg(count(*)).alias("total_events")
-rejected_events = final_rejections.groupBy("etag").agg(count(*)).alias("rejected_events")
-metrics_df = total_events.join(rejected_events, "etag", "left").fillna(0)
+metrics_df = total_events_df.join(rejected_events_df, "etag", "left").fillna(0)
 metrics_df = metrics_df.withColumn(
                 "valid_events", 
-                col(total_events) - col(rejected_events)
+                col("total_events") - col("rejected_events")
 )
 metrics_df = metrics_df.withColumn(
                 "file_status", 
