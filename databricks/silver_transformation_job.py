@@ -71,11 +71,27 @@ def process_rejections (rejected_df, reject_reason, raw_json_expr):
 raw_df = spark.read.option("multiLine", True).json(file_paths)\
             .withColumn("file_path", input_file_name())
             
-raw_df = raw_df.join(etag_mapping_df, "file_path", "left")
+raw_df = raw_df.join(broadcast(etag_mapping_df), "file_path", "left")
 
-df_all_events = raw_df.select(
+raw_events = raw_df.select(
+    col("file_id"),
     col("etag"),
-    explode_outer("events").alias("events")
+    col("domain"),
+    col("source_system"),
+    col("created_at"),
+    explode("events").alias("event")
+)
+
+raw_events.persist()
+
+df_all_events = raw_events.select(
+    col("etag"),
+    col("event.event_id").alias("event_id"),
+    col("event.event_type").alias("event_type"),
+    col("event.source").alias("source"),
+    col("event.event_ts").alias("event_ts"),
+    col("event.ingest_ts").alias("ingest_ts"),
+    col("event.payload").alias("payload")
 )
 
 # Basic file-level validation: Check for missing columns
@@ -107,7 +123,7 @@ process_rejections(
 )
 
 # Flatten approved container
-df_cont = raw_df.filter(
+df_cont = raw_events.filter(
     col("file_id").isNotNull() &
     col("domain").isNotNull() &
     col("source_system").isNotNull() &
@@ -118,7 +134,12 @@ df_cont = raw_df.filter(
     col("domain"),
     col("source_system"),
     col("created_at"),
-    explode("events").alias("event")
+    col("event.event_id").alias("event_id"),
+    col("event.event_type").alias("event_type"),
+    col("event.source").alias("source"),
+    col("event.event_ts").alias("event_ts"),
+    col("event.ingest_ts").alias("ingest_ts"),
+    col("event.payload").alias("payload")
 )
 
 df_cont = df_cont.persist()
@@ -411,9 +432,15 @@ merge_to_silver(orders_payload_df, "demo_catalog.silver.events_order")
 total_events_df = df_all_events.groupBy("etag").agg(count("*").alias("total_events"))
 
 # Updating reject table
+final_rejections_exists = False
 if rejected_dfs:
     final_rejections = reduce(lambda a, b: a.unionByName(b), rejected_dfs)
+    final_rejections = final_rejections.withColumn(
+        "reject_hash",
+        sha2(concat_ws("|", col("etag"), col("event_id")),256)
+    )
     final_rejections = final_rejections.persist()
+    final_rejections_exists = True
     final_rejections.write.mode("append").saveAsTable("demo_catalog.bronze.rejected_events")
     rejected_events_df = final_rejections.groupBy("etag").agg(count("*").alias("rejected_events"))
 else:
@@ -450,6 +477,9 @@ etag_metrics = {
 
 df_cont.unpersist()
 df_env.unpersist()
+if final_rejections_exists:
+    final_rejections.unpersist()
+raw_events.unpersist()
 
 dbutils.notebook.exit(json.dumps({
     "status" : "COMPLETED",
