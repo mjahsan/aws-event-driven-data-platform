@@ -13,10 +13,14 @@ from functools import reduce
 spark.conf.set("spark.sql.shuffle.partitions", "20")
 
 # Capturing metadata (ETag and file paths) for the incoming files as one string string and converting it to a list
-dbutils.widgets.text("file_paths", "")
+dbutils.widgets.text("file_metadata", "")
 file_metadata = json.loads(dbutils.widgets.get("file_metadata"))
 
-if not file_paths:
+# If the file_metadata is not a list array but a dictionary
+if isinstance(file_metadata, dict):
+    file_metadata = [file_metadata]
+
+if not file_metadata:
     raise ValueError("No file paths provided to Silver job")
 
 # Extracting the file paths seperately
@@ -62,9 +66,11 @@ def process_rejections (rejected_df, reject_reason, raw_json_expr):
 #-----------------------------------------------
 # 3. FILE-LEVEL VALIDATION AND PROCESSING
 #-----------------------------------------------
-# Reading the JSON files from the list of paths 
+# Reading the JSON files from the list of paths along with the 'hidden' file_path to map the Etag downstream 
 raw_df = spark.read.option("multiLine", True).json(file_paths)\
-            .withColumn("
+            .withColumn("file_path", input_file_name())
+            
+raw_df = raw_df.join(etag_mapping_df, "file_path", left)
 
 # Basic file-level validation: Check for missing columns
 required_cols = ["file_id", "domain", "source_system", "created_at", "events"]
@@ -368,7 +374,7 @@ orders_payload_df = orders_df.select(
 )
 
 #-----------------------------------------------
-# 6. MERGE TO DELTA TABLE
+# 6. MERGE TO DELTA TABLE AND UPDATING REJECT TABLE
 #-----------------------------------------------
 # Repartitioning to reduce skewness
 users_payload_df = users_payload_df.repartition(20, "event_id")
@@ -393,35 +399,44 @@ merge_to_silver(users_payload_df, "demo_catalog.silver.events_user")
 merge_to_silver(payments_payload_df, "demo_catalog.silver.events_payment")
 merge_to_silver(orders_payload_df, "demo_catalog.silver.events_order")
     
-#-----------------------------------------------
-# 7. METRIC COUNTS
-#-----------------------------------------------
+# Updating reject table
 if rejected_dfs:
     final_rejections = reduce(lambda a, b: a.unionByName(b), rejected_dfs)
     final_rejections = final_rejections.persist()
-    rejected_count = final_rejections.count()
     final_rejections.write.mode("append").saveAsTable("demo_catalog.bronze.rejected_events")
 else:
-    rejected_count = 0
+    print("No rejections")
 
-total_events = df_cont.count()
-metrics = {
-    "total_events": total_events,
-    "rejected_events": rejected_count,
-    "valid_events": total_events - rejected_count,
+#-----------------------------------------------
+# 7. METRIC COUNTS
+#-----------------------------------------------
+total_events = df_cont.groupBy("etag").agg(count(*)).alias("total_events")
+rejected_events = final_rejections.groupBy("etag").agg(count(*)).alias("rejected_events")
+metrics_df = total_events.join(rejected_events, "etag", "left").fillna(0)
+metrics_df = metrics_df.withColumn(
+                "valid_events", 
+                col(total_events) - col(rejected_events)
+)
+metrics_df = metrics_df.withColumn(
+                "file_status", 
+                when(col("valid_events") == 0, "FAILED")
+                .when(col("rejected_events") == 0, "SUCCESS")
+                .otherwise("PARTIAL_SUCCESS")
+)
+
+etag_metrics = {
+    row["etag"]: {
+        "total": row["total_events"],
+        "valid": row["valid_events"],
+        "rejected": row["rejected_events"]
+    }
+    for row in metrics_df.collect()
 }
 
-if metrics["valid_events"] == 0:
-    batch_status = "FAILED"
-elif metrics["rejected_events"] == 0:
-    batch_status = "SUCCESS"
-else:
-    batch_status = "PARTIAL_SUCCESS"
-    
 df_cont.unpersist()
 df_env.unpersist()
 
 dbutils.notebook.exit(json.dumps({
-    "status" : batch_status,
-    "metrics" : metrics
+    "status" : "COMPLETED",
+    "metrics" : etag_metrics
 }))
