@@ -17,9 +17,10 @@
     "currency": {
       "type": "string"
     },
-    "failure_reason": {
+    "status": {
       "type": "string"
     }
   },
   "additionalProperties": false
 }
+
