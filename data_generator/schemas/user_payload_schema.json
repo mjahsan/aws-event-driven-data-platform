@@ -11,6 +11,9 @@
       "type": "string",
       "format": "email"
     },
+    "email": {
+      "type": "string"
+    },
     "country": {
       "type": "string"
     },
@@ -20,3 +23,4 @@
   },
   "additionalProperties": false
 }
+
