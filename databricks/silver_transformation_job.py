@@ -55,6 +55,7 @@ def process_rejections (rejected_df, reject_reason, raw_json_expr):
         col("domain"),
         col("source_system"),
         col("created_at"),
+        col("etag"),
         e_id.alias("event_id"),
         e_type.alias("event_type"),
         reject_reason.alias("rejection_reason"),
@@ -108,6 +109,7 @@ df_cont = raw_df.filter(
     col("created_at").isNotNull()
 ).select(
     col("file_id"),
+    col("etag"),
     col("domain"),
     col("source_system"),
     col("created_at"),
@@ -156,6 +158,7 @@ df_env = df_cont.filter(
     col("event.event_ts") <= current_timestamp()
 ).select(
     col("file_id"),
+    col("etag"),
     col("domain"),
     col("source_system"),
     col("created_at"),
@@ -169,16 +172,16 @@ df_env = df_cont.filter(
 
 df_env = df_env.persist()
 
-# Handling domain mismatch
-domain_mismatch_cond = col("domain") != col("event_type")
+# Handling domain mismatch - Extra safety but for this project event_type is indeed different than the domain name as event_type demonstrates the status of it's respective type
+#domain_mismatch_cond = col("domain") != col("event_type")
 
-process_rejections(
-    df_env.filter(domain_mismatch_cond),
-    lit("DOMAIN_EVENT_TYPE_MISMATCH"),
-    to_json(struct("event_id", "event_type", "source", "event_ts","ingest_ts","payload"))
-)
+#process_rejections(
+#    df_env.filter(domain_mismatch_cond),
+#    lit("DOMAIN_EVENT_TYPE_MISMATCH"),
+#    to_json(struct("event_id", "event_type", "source", "event_ts","ingest_ts","payload"))
+#)
                     
-df_env = df_env.filter(col("domain") == col("event_type"))
+#df_env = df_env.filter(col("domain") == col("event_type"))
 
 # Handling invalid event_type
 valid_types = ["user_events", "payment_events", "order_events"]
@@ -337,6 +340,7 @@ orders_df = orders_df.filter(
 def common_fields ():
     return [
     col("file_id"),
+    col("etag"),
     col("domain"),
     col("source_system"),
     col("created_at"),
