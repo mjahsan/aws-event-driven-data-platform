@@ -1,4 +1,4 @@
-'''Schema and tables for silver layer'''
+-- Schema and tables for silver layer
 CREATE CATALOG IF NOT EXISTS demo_catalog;
 
 USE CATALOG demo_catalog;
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS silver.events_user (
 )
 USING DELTA
 PARTITIONED BY (event_date)
-;
+LOCATION 's3://event-platform-new/silver/user_events';
 
 DROP TABLE IF EXISTS silver.events_payment;
 
@@ -47,7 +47,8 @@ CREATE TABLE IF NOT EXISTS silver.events_payment(
   failure_reason STRING
 )
 USING DELTA
-PARTITIONED BY (event_date);
+PARTITIONED BY (event_date)
+LOCATION 's3://event-platform-new/silver/payment_events';
 
 DROP TABLE IF EXISTS silver.events_order;
 
@@ -69,9 +70,10 @@ CREATE TABLE IF NOT EXISTS silver.events_order (
   status STRING
 )
 USING DELTA
-PARTITIONED BY (event_date);
+PARTITIONED BY (event_date)
+LOCATION 's3://event-platform-new/silver/order_events';
 
-'''Schema and table for reject layer'''
+-- Schema and table for reject layer
 CREATE SCHEMA IF NOT EXISTS demo_catalog.bronze;
 
 DROP TABLE IF EXISTS bronze.rejected_events;
@@ -91,4 +93,5 @@ CREATE TABLE IF NOT EXISTS bronze.rejected_events (
   reject_hash STRING
 )
 USING DELTA
-PARTITIONED BY (rejection_date);
+PARTITIONED BY (rejection_date)
+LOCATION 's3://event-platform-new/silver/rejected_events';
