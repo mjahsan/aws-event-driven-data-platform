@@ -1,12 +1,43 @@
--- Schema and tables for silver layer
+-- Creating external location for validated, bronze and silver with IAM role access
+CREATE EXTERNAL LOCATION s3_validated_location
+URL 's3://event-platform-new/validated'
+WITH (CREDENTIAL `aws-databricks-connection-role`);
+
+CREATE EXTERNAL LOCATION s3_bronze_location
+URL 's3://event-platform-new/bronze'
+WITH (CREDENTIAL `aws-databricks-connection-role`);
+
+CREATE EXTERNAL LOCATION s3_silver_location
+URL 's3://event-platform-new/silver'
+WITH (CREDENTIAL `aws-databricks-connection-role`);
+
+-- Catalog and schema creation
 CREATE CATALOG IF NOT EXISTS demo_catalog;
 
 USE CATALOG demo_catalog;
 
+DROP SCHEMA IF EXISTS demo_catalog.silver CASCADE;
 CREATE SCHEMA IF NOT EXISTS demo_catalog.silver;
 
-DROP TABLE IF EXISTS silver.events_user;
+DROP SCHEMA IF EXISTS demo_catalog.bronze CASCADE;
+CREATE SCHEMA IF NOT EXISTS demo_catalog.bronze;
 
+-- Granting access to catalog
+GRANT USE CATALOG ON CATALOG demo_catalog TO `your-databricks-user`;
+
+-- Granting access to validated (read intial validated data)
+GRANT READ FILES ON EXTERNAL LOCATION s3_validated_location TO `your-databricks-user`;
+
+-- Granting access to bronze (read and write for rejected data)
+GRANT USE SCHEMA, CREATE TABLE ON SCHEMA demo_catalog.bronze TO `your-databricks-user`;
+GRANT READ FILES, WRITE FILES ON EXTERNAL LOCATION s3_bronze_location TO `your-databricks-user`;
+
+-- Granting access to silver (read and write for transformed data)
+GRANT USE SCHEMA, CREATE TABLE ON SCHEMA demo_catalog.silver TO `your-databricks-user`;
+GRANT READ FILES, WRITE FILES ON EXTERNAL LOCATION s3_silver_location TO `your-databricks-user`;
+
+-- Silver tables creation
+DROP TABLE IF EXISTS silver.events_user;
 CREATE TABLE IF NOT EXISTS silver.events_user (
   file_id STRING,
   domain STRING,
@@ -28,7 +59,6 @@ PARTITIONED BY (event_date)
 LOCATION 's3://event-platform-new/silver/user_events';
 
 DROP TABLE IF EXISTS silver.events_payment;
-
 CREATE TABLE IF NOT EXISTS silver.events_payment(
   file_id STRING,
   domain STRING,
@@ -51,7 +81,6 @@ PARTITIONED BY (event_date)
 LOCATION 's3://event-platform-new/silver/payment_events';
 
 DROP TABLE IF EXISTS silver.events_order;
-
 CREATE TABLE IF NOT EXISTS silver.events_order (
   file_id STRING,
   domain STRING,
@@ -73,11 +102,8 @@ USING DELTA
 PARTITIONED BY (event_date)
 LOCATION 's3://event-platform-new/silver/order_events';
 
--- Schema and table for reject layer
-CREATE SCHEMA IF NOT EXISTS demo_catalog.bronze;
-
+-- Bronze table creation for rejected entries
 DROP TABLE IF EXISTS bronze.rejected_events;
-
 CREATE TABLE IF NOT EXISTS bronze.rejected_events (
   file_id STRING,
   domain STRING,
@@ -94,4 +120,4 @@ CREATE TABLE IF NOT EXISTS bronze.rejected_events (
 )
 USING DELTA
 PARTITIONED BY (rejection_date)
-LOCATION 's3://event-platform-new/silver/rejected_events';
+LOCATION 's3://event-platform-new/bronze/rejected_events';
