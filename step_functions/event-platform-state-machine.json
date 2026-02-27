@@ -114,13 +114,13 @@
                 "ErrorEquals": [
                   "DynamoDB.ConditionalCheckFailedException"
                 ],
-                "Next": "AlreadyUpdated"
+                "Next": "SkippingUpdate"
               }
             ],
             "ResultPath": null,
             "End": true
           },
-          "AlreadyUpdated": {
+          "SkippingUpdate": {
             "Type": "Pass",
             "End": true
           }
@@ -204,13 +204,13 @@
                 "ErrorEquals": [
                   "DynamoDB.ConditionalCheckFailedException"
                 ],
-                "Next": "AlreadyUpdated"
+                "Next": "UpdateSkip"
               }
             ],
             "ResultPath": null,
             "End": true
           },
-          "AlreadyUpdated": {
+          "UpdateSkip": {
             "Type": "Pass",
             "End": true
           }
@@ -260,9 +260,9 @@
       "ResultPath": null,
       "Next": "PrepareDeleteEntries",
       "Iterator": {
-        "StartAt": "ChangeStatus",
+        "StartAt": "ChangingStatus",
         "States": {
-          "ChangeStatus": {
+          "ChangingStatus": {
             "Type": "Task",
             "Resource": "arn:aws:states:::aws-sdk:dynamodb:updateItem",
             "Parameters": {
@@ -363,9 +363,9 @@
       "ResultPath": "$.deleteEntries",
       "Next": "DeleteMessagesForFailsTasks",
       "Iterator": {
-        "StartAt": "FormatDeleteEntry",
+        "StartAt": "FormatingDeleteEntry",
         "States": {
-          "FormatDeleteEntry": {
+          "FormatingDeleteEntry": {
             "Type": "Pass",
             "Parameters": {
               "Id.$": "$.MessageId",
