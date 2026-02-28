@@ -33,13 +33,12 @@ DROP TABLE IF EXISTS gold.fact_orders;
 CREATE TABLE IF NOT EXISTS gold.fact_orders(
   order_id STRING, -- Primary Key
   user_id STRING, -- Foreign Key
-  device_key INT, -- Foreign Key
   order_date DATE,
   order_amount DECIMAL (10,2),
   currency STRING,
   order_status STRING,
   is_paid_flag BOOLEAN,
-  is_refunded_flag BOOLEAN
+  order_date DATE
 )
 USING DELTA
 PARTITIONED BY (order_date)
@@ -49,10 +48,10 @@ DROP TABLE IF EXISTS gold.fact_payments;
 CREATE TABLE IF NOT EXISTS gold.fact_payments(
   payment_id STRING,-- Primary Key
   order_id STRING,-- Foreign Key
-  payment_date DATE,
   payment_amount DECIMAL (10,2),
   currency STRING,
-  payment_status STRING
+  payment_status STRING,
+  payment_date DATE
 )
 USING DELTA
 PARTITIONED BY (payment_date)
@@ -66,11 +65,3 @@ CREATE TABLE IF NOT EXISTS gold.dim_users(
 )
 USING DELTA
 LOCATION 's3://event-platform-new/gold/dim_users';
-
-DROP TABLE IF EXISTS gold.dim_devices;
-CREATE TABLE IF NOT EXISTS gold.dim_devices(
-  device_key INT,-- Primary Key
-  device_type STRING
-)
-USING DELTA
-LOCATION 's3://event-platform-new/gold/dim_devices';
