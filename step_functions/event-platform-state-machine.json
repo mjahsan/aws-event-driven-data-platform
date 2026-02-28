@@ -244,7 +244,7 @@
         },
         {
           "Variable": "$.statusResult.Payload.overallstatus",
-          "StringEquals": "SUCCESS",
+          "StringEquals": "COMPLETED",
           "Next": "UpdateFinalDynamoDBStatus"
         },
         {
