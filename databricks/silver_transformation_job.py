@@ -425,9 +425,9 @@ def merge_to_silver(df, table_name):
     )
 
 # Executing MERGE
-merge_to_silver(users_payload_df, "demo_catalog.silver.events_user")
-merge_to_silver(payments_payload_df, "demo_catalog.silver.events_payment")
-merge_to_silver(orders_payload_df, "demo_catalog.silver.events_order")
+merge_to_silver(users_payload_df, "demo_catalog.silver.user_events")
+merge_to_silver(payments_payload_df, "demo_catalog.silver.payment_events")
+merge_to_silver(orders_payload_df, "demo_catalog.silver.order_events")
 
 total_events_df = df_all_events.groupBy("etag").agg(count("*").alias("total_events"))
 
