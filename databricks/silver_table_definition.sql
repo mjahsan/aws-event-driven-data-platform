@@ -37,8 +37,8 @@ GRANT USE SCHEMA, CREATE TABLE ON SCHEMA demo_catalog.silver TO `your-databricks
 GRANT READ FILES, WRITE FILES ON EXTERNAL LOCATION s3_silver_location TO `your-databricks-user`;
 
 -- Silver tables creation
-DROP TABLE IF EXISTS silver.events_user;
-CREATE TABLE IF NOT EXISTS silver.events_user (
+DROP TABLE IF EXISTS silver.user_events;
+CREATE TABLE IF NOT EXISTS silver.user_events (
   file_id STRING,
   domain STRING,
   source_system STRING,
@@ -58,8 +58,8 @@ USING DELTA
 PARTITIONED BY (event_date)
 LOCATION 's3://event-platform-new/silver/user_events';
 
-DROP TABLE IF EXISTS silver.events_payment;
-CREATE TABLE IF NOT EXISTS silver.events_payment(
+DROP TABLE IF EXISTS silver.payment_events;
+CREATE TABLE IF NOT EXISTS silver.payment_events(
   file_id STRING,
   domain STRING,
   source_system STRING,
@@ -80,8 +80,8 @@ USING DELTA
 PARTITIONED BY (event_date)
 LOCATION 's3://event-platform-new/silver/payment_events';
 
-DROP TABLE IF EXISTS silver.events_order;
-CREATE TABLE IF NOT EXISTS silver.events_order (
+DROP TABLE IF EXISTS silver.order_events;
+CREATE TABLE IF NOT EXISTS silver.order_events(
   file_id STRING,
   domain STRING,
   source_system STRING,
