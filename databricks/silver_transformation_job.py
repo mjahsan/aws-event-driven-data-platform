@@ -250,7 +250,7 @@ valid_payment_payload_struct = StructType([
     StructField("order_id", StringType(), True),
     StructField("amount", DecimalType(10,2), True),
     StructField("currency", StringType(), True),
-    StructField("failure_reason", StringType(), True)
+    StructField("status", StringType(), True)
 ])
 
 valid_order_payload_struct = StructType([
@@ -391,7 +391,7 @@ payments_payload_df = payments_df.select(
     col("payload.order_id").alias("order_id"),
     col("payload.amount").cast("decimal(10,2)").alias("amount"),
     col("payload.currency").alias("currency"),
-    col("payload.failure_reason").alias("failure_reason")
+    col("payload.status").alias("status")
 )
 
 orders_payload_df = orders_df.select(
