@@ -471,6 +471,7 @@ etag_metrics = {
         "total": row["total_events"],
         "valid": row["valid_events"],
         "rejected": row["rejected_events"]
+        "status": row["file_status"]
     }
     for row in metrics_df.collect()
 }
