@@ -16,27 +16,41 @@ s3:
             validated/order_events
         rejected:
             rejected/
+        silver:
+            user_events/
+            payment_events/
+            order_events/
             
-    ingestion:
-        sllowed_extension: 
-            json
-        data_generator_for_ingestion:
-            script:
-                data_generator/generate_events.py
-            schemas:
-                data_generator/schemas
-                    - event_envelope_schema.json
-                    - file_container_schema.json
-                    - order_payload_schema.json
-                    - payment_payload_schema.json
-                    - user_payload_schema.json
+ingestion:
+    Allowed_extension: 
+        json
+    data_generator_for_ingestion:
+        script:
+            data_generator/generate_events.py
+        schemas:
+            data_generator/schemas
+                - event_envelope_schema.json
+                - file_container_schema.json
+                - order_payload_schema.json
+                - payment_payload_schema.json
+                - user_payload_schema.json
             
 iam:
-    lambda_role:
+    lambda_roles:
         role_name:
-            event-platform-lambda_role
+            - event-platform-lambda_role
+            - lambda-secrets-manager-role
         policy_script:
-            infra/iam/lambda/lambda_execution_policy.json
+            - infra/iam/lambda/lambda_execution_policy.json
+            - infra/iam/lambda/lambda_secrets_manager_policy.json
+    step_function_role:
+        role_name:
+            - step_functions_for_validated_to_silver
+            - step_functions_for_silver_to_gold
+        policy_script:
+            - infra/iam/lambda/sf_validate_to_silver_policy.json
+            - infra/iam/lambda/sf_silver_to_gold_policy.json
+            
             
 lambda:
     raw_to_validated_or_rejected:
