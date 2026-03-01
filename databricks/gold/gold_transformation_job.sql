@@ -58,7 +58,7 @@ resolved_order AS (
 payment_summary AS (
     SELECT
         order_id,
-        MAX(CASE WHEN payment_status = 'SUCCESS' THEN 1 ELSE 0 END) AS is_paid_flag
+        MAX(CASE WHEN payment_status = 'payment_success' THEN 1 ELSE 0 END) AS is_paid_flag
     FROM demo_catalog.gold.fact_payments
     GROUP BY order_id
 )
