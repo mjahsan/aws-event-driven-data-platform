@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS silver.payment_events(
   order_id STRING,
   amount DECIMAL(10,2),
   currency STRING,
-  failure_reason STRING
+  status STRING
 )
 USING DELTA
 PARTITIONED BY (event_date)
