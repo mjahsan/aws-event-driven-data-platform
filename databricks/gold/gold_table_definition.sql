@@ -33,7 +33,6 @@ DROP TABLE IF EXISTS gold.fact_orders;
 CREATE TABLE IF NOT EXISTS gold.fact_orders(
   order_id STRING, -- Primary Key
   user_id STRING, -- Foreign Key
-  order_date DATE,
   order_amount DECIMAL (10,2),
   currency STRING,
   order_status STRING,
