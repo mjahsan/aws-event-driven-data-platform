@@ -1,0 +1,35 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "StepFunctionToInvokeLambda",
+            "Effect": "Allow",
+            "Action": "lambda:InvokeFunction",
+            "Resource": [
+                "arn:aws:lambda:<REGION>:<ACCOUNT NUMBER>:function:databrick-gold-trigger-lambda",
+                "arn:aws:lambda:<REGION>:<ACCOUNT NUMBER>:function:databrick-gold-status-lambda"
+            ]
+        },
+        {
+            "Sid": "StepFunctionLogging",
+            "Effect": "Allow",
+            "Action": [
+                "logs:CreateLogDelivery",
+                "logs:GetLogDelivery",
+                "logs:UpdateLogDelivery",
+                "logs:DeleteLogDelivery",
+                "logs:ListLogDeliveries",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents",
+                "logs:DescribeLogGroups",
+                "logs:DescribeLogStreams",
+                "logs:PutResourcePolicy",
+                "logs:DescribeResourcePolicies"
+            ],
+            "Resource": [
+                "arn:aws:logs:<REGION>:<ACCOUNT NUMBER>:log-group:/aws/vendedlogs/states/*",
+                "arn:aws:logs:<REGION>:<ACCOUNT NUMBER>:log-group:/aws/vendedlogs/states/*:*"
+            ]
+        }
+    ]
+}

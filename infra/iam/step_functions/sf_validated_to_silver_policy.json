@@ -1,0 +1,51 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "StepFunctionToPollSQS",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage",
+                "sqs:GetQueueAttributes"
+            ],
+            "Resource": "arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:processing-event-platform-new"
+        },
+        {
+            "Sid": "StepFunctionToInvokeLambda",
+            "Effect": "Allow",
+            "Action": "lambda:InvokeFunction",
+            "Resource": [
+                "arn:aws:lambda:<REGION>:<ACCOUNT NUMBER>:function:databrick-trigger-lambda",
+                "arn:aws:lambda:<REGION>:<ACCOUNT NUMBER>:function:databrick-status-lambda"
+            ]
+        },
+        {
+            "Sid": "StepFunctionToUpdateDynamoDB",
+            "Effect": "Allow",
+            "Action": "dynamodb:UpdateItem",
+            "Resource": "arn:aws:dynamodb:<REGION>:<ACCOUNT NUMBER>:table/event-platform-metadata"
+        },
+        {
+            "Sid": "StepFunctionLogging",
+            "Effect": "Allow",
+            "Action": [
+                "logs:CreateLogDelivery",
+                "logs:GetLogDelivery",
+                "logs:UpdateLogDelivery",
+                "logs:DeleteLogDelivery",
+                "logs:ListLogDeliveries",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents",
+                "logs:DescribeLogGroups",
+                "logs:DescribeLogStreams",
+                "logs:PutResourcePolicy",
+                "logs:DescribeResourcePolicies"
+            ],
+            "Resource": [
+                "arn:aws:logs:<REGION>:<ACCOUNT NUMBER>:log-group:/aws/vendedlogs/states/*",
+                "arn:aws:logs:<REGION>:<ACCOUNT NUMBER>:log-group:/aws/vendedlogs/states/*:*"
+            ]
+        }
+    ]
+}
