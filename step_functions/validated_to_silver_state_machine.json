@@ -6,7 +6,7 @@
       "Type": "Task",
       "Resource": "arn:aws:states:::aws-sdk:sqs:receiveMessage",
       "Parameters": {
-        "QueueUrl": "https://sqs.<REGION>.amazonaws.com/<ACCOUNT NUMBER>/processing-event-platform-new",
+        "QueueUrl": "https://<REGION>.amazonaws.com/<ACCOUNT NUMBER>/validation_lambda_to_step_functions",
         "MaxNumberOfMessages": 10,
         "WaitTimeSeconds": 5
       },
@@ -44,8 +44,8 @@
       "ResultPath": "$.fileMetadata",
       "Iterator": {
         "StartAt": "DecodeBody",
-        "States":{
-          "DecodeBody":{
+        "States": {
+          "DecodeBody": {
             "Type": "Pass",
             "Parameters": {
               "Body.$": "States.StringToJson($.Body)"
@@ -65,7 +65,7 @@
       },
       "Next": "ProgressUpdateInDynamoDB"
     },
-    "ProgressUpdateInDynamoDB":{
+    "ProgressUpdateInDynamoDB": {
       "Type": "Map",
       "ItemsPath": "$.fileMetadata",
       "ResultPath": null,
@@ -148,14 +148,14 @@
       ],
       "Catch": [
         {
-        "ErrorEquals":[
-          "States.ALL"
-        ],
-        "Next": "RevertingDynamoDBStatus"
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "RevertingDynamoDBStatus"
         }
       ]
     },
-    "RevertingDynamoDBStatus":{
+    "RevertingDynamoDBStatus": {
       "Type": "Map",
       "ItemsPath": "$.fileMetadata",
       "ResultPath": null,
@@ -244,7 +244,7 @@
         },
         {
           "Variable": "$.statusResult.Payload.overallstatus",
-          "StringEquals": "COMPLETED",
+          "StringEquals": "SUCCESS",
           "Next": "UpdateFinalDynamoDBStatus"
         },
         {
@@ -279,7 +279,7 @@
               },
               "ExpressionAttributeValues": {
                 ":newStatus": {
-                    "S.$": "$.status"
+                  "S.$": "$.status"
                 },
                 ":rid": {
                   "S.$": "$.run_id"
@@ -342,7 +342,7 @@
       "Type": "Task",
       "Resource": "arn:aws:states:::aws-sdk:sqs:deleteMessageBatch",
       "Parameters": {
-        "QueueUrl": "https://sqs.<REGION>.amazonaws.com/<ACCOUNT NUMBER>/processing-event-platform-new",
+        "QueueUrl": "https://<REGION>.amazonaws.com/<ACCOUNT NUMBER>/validation_lambda_to_step_functions",
         "Entries.$": "$.deleteEntries"
       },
       "Retry": [
@@ -361,7 +361,7 @@
       "Type": "Map",
       "ItemsPath": "$.sqs.Messages",
       "ResultPath": "$.deleteEntries",
-      "Next": "DeleteMessagesForFailsTasks",
+      "Next": "DeleteMessagesForFailedTasks",
       "Iterator": {
         "StartAt": "FormatingDeleteEntry",
         "States": {
@@ -376,11 +376,11 @@
         }
       }
     },
-    "DeleteMessagesForFailsTasks": {
+    "DeleteMessagesForFailedTasks": {
       "Type": "Task",
       "Resource": "arn:aws:states:::aws-sdk:sqs:deleteMessageBatch",
       "Parameters": {
-        "QueueUrl": "https://sqs.<REGION>.amazonaws.com/<ACCOUNT NUMBER>/processing-event-platform-new",
+        "QueueUrl": "https://<REGION>.amazonaws.com/<ACCOUNT NUMBER>/validation_lambda_to_step_functions",
         "Entries.$": "$.deleteEntries"
       },
       "Retry": [

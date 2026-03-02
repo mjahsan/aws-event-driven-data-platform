@@ -9,7 +9,7 @@
                 "sqs:DeleteMessage",
                 "sqs:GetQueueAttributes"
             ],
-            "Resource": "arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:processing-event-platform-new"
+            "Resource": "arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:validation_lambda_to_step_functions"
         },
         {
             "Sid": "StepFunctionToInvokeLambda",

@@ -21,19 +21,18 @@ s3:
             payment_events/
             order_events/
             
-ingestion:
-    Allowed_extension: 
+data_generator_for_ingestion:
+    allowed_extension: 
         json
-    data_generator_for_ingestion:
-        script:
-            data_generator/generate_events.py
-        schemas:
-            data_generator/schemas
-                - event_envelope_schema.json
-                - file_container_schema.json
-                - order_payload_schema.json
-                - payment_payload_schema.json
-                - user_payload_schema.json
+    script:
+        data_generator/generate_events.py
+    schemas:
+        data_generator/schemas
+            - event_envelope_schema.json
+            - file_container_schema.json
+            - order_payload_schema.json
+            - payment_payload_schema.json
+            - user_payload_schema.json
             
 iam:
     lambda_roles:
@@ -80,7 +79,7 @@ lambda:
         environment_variables:
             none
         script:
-            lambda/raw_to_validated_or_rejected/
+            lambda/raw_to_validated_or_rejected/event_processing_function.py
             
     validated_to_silver:
         dataricks_silver_trigger:
@@ -99,7 +98,7 @@ lambda:
                 - SILVER_JOB_ID
                 - SECRET_NAME
             script:
-                lambda/validated_to_silver/
+                lambda/validated_to_silver/databricks_silver_trigger_lambda.py
                 
         dataricks_silver_status:
             function_name: 
@@ -115,9 +114,8 @@ lambda:
             environment_variables:
                 - DATABRICKS_HOST
                 - SILVER_JOB_ID
-                - SECRET_NAME
             script:
-                lambda/validated_to_silver/
+                lambda/validated_to_silver/databricks_silver_status_lambda.py
                 
     silver_to_gold:
         dataricks_gold_trigger:
@@ -136,7 +134,7 @@ lambda:
                 - GOLD_JOB_ID
                 - SECRET_NAME
             script:
-                lambda/silver_to_gold/
+                lambda/silver_to_gold/databricks_gold_trigger_lambda.py
                 
         dataricks_gold_status:
             function_name: 
@@ -154,7 +152,7 @@ lambda:
                 - GOLD_JOB_ID
                 - SECRET_NAME
             script:
-                lambda/silver_to_gold/
+                lambda/silver_to_gold/databricks_gold_status_lambda.py
             
 dynamodb:
     table_name:
@@ -173,7 +171,7 @@ dynamodb:
 sqs:
     main_queue_for_validation:
         queue_name: 
-            event-platform-new
+            s3_to_validation_lambda
         visibility_timeout_seconds:
             30
         message_retention_period_days:
@@ -190,15 +188,15 @@ sqs:
         dead_letter_queue:
             enabled
             queue_name:
-                arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:dlq-event-platform-new
+                arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:dlq-s3_to_validation_lambda
             maximum_retry_count:
                 3
         access_policy:
-            infra/sqs/main/main_validation_access_policy.json
+            infra/sqs/s3_to_validation_lambda/s3_to_validation_lambda_policy.json
     
     dead_letter_queue_for_validation:
         queue_name: 
-            dlq-event-platform-new
+            dlq_for_s3_to_validation_lambda
         visibility_timeout_seconds:
             30
         message_retention_period_days:
@@ -217,16 +215,16 @@ sqs:
             permission:
                 by_queue
             queue_name:
-                arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:event-platform-new
+                arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:s3_to_validation_lambda
         dead_letter_queue:
             diabled
         access_policy:
-            infra/sqs/dlq/dlq_validation_access_policy.json
+            infra/sqs/s3_to_validation_lambda/dlq_for_s3_to_validation_lambda_policy.json
 
   
-    main_queue_for_processing_silver_to_gold:
+    main_queue_for_processing_validated_to_step_functions:
         queue_name: 
-            processing-event-platform-new
+            validation_lambda_to_step_functions
         visibility_timeout_seconds:
             360
         message_retention_period_days:
@@ -243,15 +241,15 @@ sqs:
         dead_letter_queue:
             enabled
             queue_name:
-                arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:dlq-processing-event-platform-new
+                arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:dlq_for_validation_lambda_to_step_functions
             maximum_retry_count:
                 3
         access_policy:
-            infra/sqs/main/main_silver_to_gold_access_policy.json
+            infra/sqs/validation_lambda_to_step_functions/validation_lambda_to_step_functions.json
     
-    dead_letter_queue_for_processing_silver_to_gold:
+    dead_letter_queue_for_processing_validated_to_step_functions:
         queue_name: 
-            dlq-processing-event-platform-new
+            dlq_for_validation_lambda_to_step_functions
         visibility_timeout_seconds:
             30
         message_retention_period_days:
@@ -270,11 +268,11 @@ sqs:
             permission:
                 by_queue
             queue_name:
-                arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:processing-event-platform-new
+                arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:validation_lambda_to_step_functions
         dead_letter_queue:
             diabled
         access_policy:
-            infra/sqs/dlq/dlq_silver_to_gold_access_policy.json 
+            infra/sqs/validation_lambda_to_step_functions/dlq_for_validation_lambda_to_step_functions.json
 
 step_functions:
     state_machine_name:

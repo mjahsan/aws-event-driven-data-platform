@@ -9,7 +9,7 @@
         "AWS": "arn:aws:iam::<ACCOUNT NUMBER>root"
       },
       "Action": "SQS:*",
-      "Resource": "arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:dlq-event-platform-new"
+      "Resource": "arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:dlq_for_s3_to_validation_lambda"
     }
   ]
 }

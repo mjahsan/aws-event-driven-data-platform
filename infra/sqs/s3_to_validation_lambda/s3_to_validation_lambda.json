@@ -8,7 +8,7 @@
         "AWS": "arn:aws:iam::<ACCOUNT NUMBER>:root"
       },
       "Action": "SQS:*",
-      "Resource": "arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:event-platform-new"
+      "Resource": "arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:s3_to_validation_lambda"
     },
     {
       "Sid": "AllowS3ToSendMessage",
@@ -17,7 +17,7 @@
         "Service": "s3.amazonaws.com"
       },
       "Action": "SQS:SendMessage",
-      "Resource": "arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:event-platform-new",
+      "Resource": "arn:aws:sqs:<REGION>:<ACCOUNT NUMBER>:s3_to_validation_lambda",
       "Condition": {
         "ArnEquals": {
           "aws:SourceArn": "arn:aws:s3:::event-platform-new"
