@@ -17,9 +17,11 @@ s3:
         rejected:
             rejected/
         silver:
-            user_events/
-            payment_events/
-            order_events/
+            silver/user_events/
+            silver/payment_events/
+            silver/order_events/
+        gold:
+            gold/
             
 data_generator_for_ingestion:
     allowed_extension: 
