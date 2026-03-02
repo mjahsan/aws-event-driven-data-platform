@@ -326,7 +326,7 @@ databricks:
             ddl:
                 databricks/silver/silver_table_definition.sql
             optimization:
-                databricks/silver/silver_maintenance_job.py
+                databricks/silver/silver_maintenance_job.sql
             architecture_details:
                 databricks/silver/silver_layer_performance architecture.md
 
@@ -342,9 +342,9 @@ databricks:
         schema:
             gold
         scripts:
-            pyspark:
-                databricks/gold/gold_transformation_job.py
+            sql:
+                databricks/gold/gold_transformation_job.sql
             ddl:
                 databricks/gold/gold_table_definition.sql
             optimization:
-                databricks/gold/gold_maintenance_job.py
+                databricks/gold/gold_maintenance_job.sql
