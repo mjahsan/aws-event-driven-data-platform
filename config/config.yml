@@ -78,6 +78,8 @@ lambda:
             event_source_mapping
         environment_variables:
             none
+        iam_role:
+            event-platform-lambda_role
         script:
             lambda/raw_to_validated_or_rejected/event_processing_function.py
             
@@ -97,6 +99,8 @@ lambda:
                 - DATABRICKS_HOST
                 - SILVER_JOB_ID
                 - SECRET_NAME
+            iam_role:
+                lambda-secrets-manager-role
             script:
                 lambda/validated_to_silver/databricks_silver_trigger_lambda.py
                 
@@ -114,6 +118,9 @@ lambda:
             environment_variables:
                 - DATABRICKS_HOST
                 - SILVER_JOB_ID
+                - SECRET_NAME
+            iam_role:
+                lambda-secrets-manager-role
             script:
                 lambda/validated_to_silver/databricks_silver_status_lambda.py
                 
@@ -133,6 +140,8 @@ lambda:
                 - DATABRICKS_HOST
                 - GOLD_JOB_ID
                 - SECRET_NAME
+            iam_role:
+                lambda-secrets-manager-role
             script:
                 lambda/silver_to_gold/databricks_gold_trigger_lambda.py
                 
@@ -151,6 +160,8 @@ lambda:
                 - DATABRICKS_HOST
                 - GOLD_JOB_ID
                 - SECRET_NAME
+            iam_role:
+                lambda-secrets-manager-role
             script:
                 lambda/silver_to_gold/databricks_gold_status_lambda.py
             
@@ -275,7 +286,63 @@ sqs:
             infra/sqs/validation_lambda_to_step_functions/dlq_for_validation_lambda_to_step_functions.json
 
 step_functions:
-    state_machine_name:
-        ValidatedToSilverStateMachine
-    graph:
-        stepfunctions_graph.png
+    validated_to_silver:
+        state_machine_name:
+            validated_to_silver_state_machine
+        graph:
+            validated_to_silver_state_machine.png
+        iam_role:
+            step_functions_for_validated_to_silver
+        script:
+            step_functions/validated_to_silver_state_machine.json
+            
+    silver_to_gold:
+        state_machine_name:
+            silver_to_gold_state_machine
+        graph:
+            silver_to_gold_state_machine.png
+        iam_role:
+            step_functions_for_silver_to_gold
+        script:
+            step_functions/silver_to_gold_state_machine.json
+            
+databricks:
+    silver_and_bronze:
+        mode:
+            job_pipeline
+        environment:
+            notebook
+        compute:
+            serverless
+        catalogue_name:
+            demo
+        schema:
+            silver
+        scripts:
+            pyspark:
+                databricks/silver/silver_transformation_job.py
+            ddl:
+                databricks/silver/silver_table_definition.sql
+            optimization:
+                databricks/silver/silver_maintenance_job.py
+            architecture_details:
+                databricks/silver/silver_layer_performance architecture.md
+
+    gold:
+        mode:
+            job_pipeline
+        environment:
+            notebook
+        compute:
+            serverless
+        catalogue_name:
+            demo
+        schema:
+            gold
+        scripts:
+            pyspark:
+                databricks/gold/gold_transformation_job.py
+            ddl:
+                databricks/gold/gold_table_definition.sql
+            optimization:
+                databricks/gold/gold_maintenance_job.py

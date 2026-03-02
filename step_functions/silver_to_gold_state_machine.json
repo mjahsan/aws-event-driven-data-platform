@@ -1,0 +1,75 @@
+{
+  "Comment": "Gold Layer Orchestration - Databricks Full Refresh",
+  "StartAt": "StartGoldJob",
+  "States": {
+    "StartGoldJob": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:<REGION>:<ACCOUNT NUMBER>:function:databricks-gold-trigger-lambda",
+      "ResultPath": "$.job",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Next": "WaitBeforeCheck"
+    },
+    "WaitBeforeCheck": {
+      "Type": "Wait",
+      "Seconds": 60,
+      "Next": "CheckGoldJobStatus"
+    },
+    "CheckGoldJobStatus": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:<REGION>:<ACCOUNT NUMBER>:function:databricks-gold-status-lambda",
+      "Parameters": {
+        "run_id.$": "$.job.run_id"
+      },
+      "ResultPath": "$.status",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Next": "EvaluateStatus"
+    },
+    "EvaluateStatus": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.status.status",
+          "StringEquals": "RUNNING",
+          "Next": "WaitBeforeCheck"
+        },
+        {
+          "Variable": "$.status.status",
+          "StringEquals": "SUCCESS",
+          "Next": "GoldSuccess"
+        },
+        {
+          "Variable": "$.status.status",
+          "StringEquals": "FAILED",
+          "Next": "GoldFailed"
+        }
+      ],
+      "Default": "GoldFailed"
+    },
+    "GoldSuccess": {
+      "Type": "Succeed"
+    },
+    "GoldFailed": {
+      "Type": "Fail",
+      "Error": "GoldJobFailed",
+      "Cause": "Databricks Gold job execution failed."
+    }
+  }
+}
