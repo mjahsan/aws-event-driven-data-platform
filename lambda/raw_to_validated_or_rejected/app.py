@@ -220,8 +220,7 @@ def sending_to_processing_queue(bucket, new_key, etag):
         sqs.send_message(
             QueueUrl = r'https://sqs.<REGION>.amazonaws.com/<ACCOUNT NUMBER>/processing-event-platform-new',
             MessageBody = json.dumps({
-                'bucket': bucket,
-                'key': new_key,
+                'file_path': f"s3://{bucket}/{new_key}",
                 'etag': etag
             })
         )

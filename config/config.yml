@@ -43,14 +43,26 @@ iam:
         policy_script:
             - infra/iam/lambda/lambda_execution_policy.json
             - infra/iam/lambda/lambda_secrets_manager_policy.json
-    step_function_role:
+    step_function_roles:
         role_name:
             - step_functions_for_validated_to_silver
             - step_functions_for_silver_to_gold
         policy_script:
-            - infra/iam/lambda/sf_validate_to_silver_policy.json
+            - infra/iam/lambda/sf_validated_to_silver_policy.json
             - infra/iam/lambda/sf_silver_to_gold_policy.json
-            
+    event_bridge_roles:
+        role_name:
+            - event_bridge_for_gold_to_validated_sf
+            - event_bridge_for_silver_to_gold_sf
+        policy_script:
+            - infra/iam/lambda/eb_validated_to_silver_policy.json
+            - infra/iam/lambda/eb_silver_to_gold_policy.json
+    databricks_role:
+        role_name:
+            - databricks_aws_connection_role
+        policy_script:
+            - infra/iam/lambda/db_aws_connection_policy.json
+            - infra/iam/lambda/db_aws_conection_trust_policy.json
             
 lambda:
     raw_to_validated_or_rejected:
@@ -60,7 +72,90 @@ lambda:
             30
         memory_mb: 
             1024
-    
+        trigger:
+            sqs:
+                event-platform-new
+        trigger_type:
+            event_source_mapping
+        environment_variables:
+            none
+        script:
+            lambda/raw_to_validated_or_rejected/
+            
+    validated_to_silver:
+        dataricks_silver_trigger:
+            function_name: 
+                databricks_silver_trigger_lambda
+            timeout_seconds: 
+                30
+            memory_mb: 
+                1024
+            trigger:
+                none
+            trigger_type:
+                none
+            environment_variables:
+                - DATABRICKS_HOST
+                - SILVER_JOB_ID
+                - SECRET_NAME
+            script:
+                lambda/validated_to_silver/
+                
+        dataricks_silver_status:
+            function_name: 
+                databricks_silver_status_lambda
+            timeout_seconds: 
+                30
+            memory_mb: 
+                1024
+            trigger:
+                none
+            trigger_type:
+                none
+            environment_variables:
+                - DATABRICKS_HOST
+                - SILVER_JOB_ID
+                - SECRET_NAME
+            script:
+                lambda/validated_to_silver/
+                
+    silver_to_gold:
+        dataricks_gold_trigger:
+            function_name: 
+                databricks_gold_trigger_lambda
+            timeout_seconds: 
+                30
+            memory_mb: 
+                1024
+            trigger:
+                none
+            trigger_type:
+                none
+            environment_variables:
+                - DATABRICKS_HOST
+                - GOLD_JOB_ID
+                - SECRET_NAME
+            script:
+                lambda/silver_to_gold/
+                
+        dataricks_gold_status:
+            function_name: 
+                databricks_silver_status_lambda
+            timeout_seconds: 
+                30
+            memory_mb: 
+                1024
+            trigger:
+                none
+            trigger_type:
+                none
+            environment_variables:
+                - DATABRICKS_HOST
+                - GOLD_JOB_ID
+                - SECRET_NAME
+            script:
+                lambda/silver_to_gold/
+            
 dynamodb:
     table_name:
         event-platform-metadata

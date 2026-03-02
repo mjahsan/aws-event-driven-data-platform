@@ -11,7 +11,7 @@ logger = logging.getLogger()
 
 # Retrieving Environment Variables
 SECRET_NAME = os.environ['SECRET_NAME']
-JOB_ID = 825662644725671 #os.environ["JOB_ID"]
+JOB_ID = 825662644725671 # os.environ["JOB_ID"] or any available datbricks job id
 DATABRICKS_HOST = os.environ['DATABRICKS_HOST']
 
 # Function to retrieve token from Secrets Manager
