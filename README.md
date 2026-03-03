@@ -30,7 +30,7 @@ micro-batching strategies.
 
 ## 🏗️ LOGICAL DATA FLOW (LAKEHOUSE LAYER)
 
-![Logical Data Model](./data_flow_diagram.png)
+![Logical Data Model](./docs/data_flow_diagram.png)
 
 This diagram illustrates how data evolves across the Lakehouse layers
 from raw ingestion to business-ready analytics.
