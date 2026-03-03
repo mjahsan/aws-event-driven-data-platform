@@ -461,9 +461,9 @@ metrics_df = metrics_df.withColumn(
 )
 metrics_df = metrics_df.withColumn(
                 "file_status", 
-                when(col("valid_events") == 0, "FAILED")
-                .when(col("rejected_events") == 0, "SUCCESS")
-                .otherwise("PARTIAL_SUCCESS")
+                when(col("valid_events") == 0, "FAILED(SILVER)")
+                .when(col("rejected_events") == 0, "SUCCESS(SILVER)")
+                .otherwise("PARTIAL_SUCCESS(SILVER)")
 )
 
 etag_metrics = {
