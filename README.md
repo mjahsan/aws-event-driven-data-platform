@@ -15,6 +15,8 @@ micro-batching strategies.
 
 ## 🏗️ HIGH LEVEL ARCHITECTURE
 
+![Event-Driven Lakehouse Architecture](./docs/event-driven-lakehouse-architecture.png)
+
 **Core Principles:** 
 
 - 	Event-driven ingestion 
@@ -23,6 +25,38 @@ micro-batching strategies.
 -	Scalable serverless architecture 
 -	Lakehouse architecture using Delta Lake 
 -	Separation of ingestion and transformation planes
+
+------------------------------------------------------------------------
+
+## 🏗️ LOGICAL DATA FLOW (LAKEHOUSE LAYER)
+
+![Logical Data Model](./data_flow_diagram.png)
+
+This diagram illustrates how data evolves across the Lakehouse layers
+from raw ingestion to business-ready analytics.
+
+### Bronze (Raw Layer)
+- Grain: File container (JSON objects)
+- Contains structured, malformed, truncated, and duplicate events
+- No transformations applied
+- Acts as immutable landing zone
+
+### Silver – File-Level Control
+- File-level validation and idempotency (eTag-based)
+- Malformed or duplicate files are rejected
+- Only validated containers move forward
+
+### Silver – Event-Level Transformation
+- Grain shifts from file container → individual event
+- Schema enforcement and domain validation applied
+- Delta MERGE ensures event-level idempotency
+- Rejected events stored separately for auditing
+
+### Gold (Business Layer)
+- Grain shifts from event → business fact
+- Star schema modeling (Fact & Dimension tables)
+- Business logic, aggregations, and optimization applied
+- Analytics-ready datasets produced
 
 ------------------------------------------------------------------------
 
