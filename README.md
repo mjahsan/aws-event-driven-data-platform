@@ -432,3 +432,55 @@ Triggered every 30--60 minutes.
 | Micro-batching   | Throughput optimization            |
 
 ------------------------------------------------------------------------
+
+## 📊 DATA FLOW SUMMARY
+
+-	Python generator creates JSON files
+-	Files uploaded to S3 (Raw)
+-	SQS buffers events
+-	Lambda validates + enforces idempotency at file level
+-  	Valid files sent to validated folder
+-  	Silver performs event-level merge on validated files + enforces idempotency at event level
+-  	Gold aggregates into fact & dimension tables on silver tables
+
+------------------------------------------------------------------------
+
+## 🛠️ TECH STACK
+
+-   AWS S3
+-   AWS SQS
+-   AWS Lambda
+-   AWS DynamoDB
+-   AWS Step Functions
+-   AWS EventBridge
+-   AWS Secrets Manager
+-   Databricks
+-   Delta Lake
+-   PySpark
+-   SQL
+-   Python
+
+------------------------------------------------------------------------
+
+## 📈 KEY FEATURES
+
+-   Fully event-driven
+-   Serverless architecture
+-   File-level idempotency
+-   Event-level idempotency
+-   Micro-batch processing
+-   Retry & failure handling
+-   Dead-letter queues
+-   Lakehouse implementation
+-   Fact & dimension modeling
+
+------------------------------------------------------------------------
+
+## 🚀 FUTURE ENHANCEMENTS
+
+-   SNS failure notifications
+-	Gold incremental inserts
+-   Enhanced monitoring dashboards
+-   Schema evolution handling
+-   Gold layer job tracking in DynamoDB
+-   CI/CD pipeline integration
