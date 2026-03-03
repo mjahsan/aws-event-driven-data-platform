@@ -28,8 +28,6 @@ micro-batching strategies.
 
 ## 🔹 DATA INGESTION PLANE
 
-------------------------------------------------------------------------
-
 ### 1️. SYNTHETIC EVENT GENERATOR (PYTHON)
 
 -   Generates synthetic:
@@ -89,8 +87,6 @@ At this stage, ingestion is complete.
 ------------------------------------------------------------------------
 
 ## 🔹 CONTROL & TRANSFORMATION PLANE
-
-------------------------------------------------------------------------
 
 ### 🥈 SILVER LAYER (DATABRICKS - PYSPARK)
 
@@ -283,5 +279,141 @@ Produces analytics-ready datasets for BI / reporting.
     ├── validated_to_silver_state_machine.json
     └── validated_to_silver_state_machine.png
 ```
+
+------------------------------------------------------------------------
+
+## ⚙️ DEPLOYMENT & EXECUTION GUIDE
+
+This project is a **manually provisioned reference architecture**.\
+It is not packaged as a one-click deployment. Infrastructure must be
+provisioned according to the provided configuration file.
+
+Refer to: config/config.yml
+
+### 1️. CONFIGURATION-DRIVEN SETUP
+
+All components are defined inside:
+
+`config.yml`
+
+The configuration defines:
+
+-   S3 bucket structure (raw, validated, rejected, silver, gold)
+-   SQS queues and DLQs
+-   Lambda functions
+-	IAM roles and access policies
+-   Step Functions definitions
+-   DynamoDB table structure
+-   Databricks job scripts and table definitions
+
+Use this file as the authoritative blueprint for provisioning resources.
+
+------------------------------------------------------------------------
+
+### 2. INFRASTRUCTURE PROVISIONING (MANUAL)
+
+Provision the following AWS resources:
+
+-   S3 buckets and folder structure
+-   SQS queues (with DLQ & visibility timeout)
+-   DynamoDB table (`etag` as partition key, on-demand capacity)
+-   Lambda functions (validation, job trigger, status check)
+-   Step Functions (Silver orchestration, Gold orchestration)
+-   EventBridge schedules for silver and gold step functions
+-   AWS Secrets Manager (Databricks host + token)
+
+Deploy Step Functions using the provided JSON definitions.\
+Deploy Lambda functions using the referenced scripts.
+
+------------------------------------------------------------------------
+
+### 3. DATABRICKS SETUP
+
+-	Create acess token in settings and store it along with the Databricks host in AWS Secrets Manager
+-	Create IAM role in AWS as mentioned in the configuration
+- 	Add Credentials using the IAM role's ARN in Unity Catalogue to generate trust policy. Attach the trust policy to the IAM role.
+-	Create two job pipelines:
+
+#### SILVER LAYER
+
+-	Table definition script
+-   PySpark transformation script
+-   Delta MERGE logic
+-   Z-ORDER optimization
+-   Unity Catalog schema creation
+
+### GOLD LAYER
+-	Table definition script
+-   SQL-based dimensional modeling
+-   Fact tables (orders, payments)
+-   Dimension tables (users)
+-   Optimization scripts
+
+------------------------------------------------------------------------
+
+### 4. RUNNING THE PIPELINE
+
+#### STEP 1 -- START SYNTHETIC PYTHON GENERATOR
+
+Run:
+
+python data_generator/generate_events.py
+
+This generates 500 events per file every 5 seconds and uploads them to
+S3 (raw layer).
+
+------------------------------------------------------------------------
+
+#### STEP 2 -- INGESTION FLOW
+
+S3 → SQS → Lambda
+
+Lambda performs: 
+
+- 	JSON validation 
+- 	File-level idempotency using DynamoDB 
+- 	Routing to validated or rejected folders 
+- 	Forwarding validated files to processing queue
+
+------------------------------------------------------------------------
+
+#### STEP 3 - SILVER PROCESSING (MICRO-BATCH)
+
+EventBridge triggers Step Function every 5 minutes.
+
+-   Collects up to 10 files
+-   Triggers Databricks Silver job
+-   Polls for status
+-   Updates DynamoDB processing state
+
+Silver performs: 
+
+- 	Schema enforcement 
+- 	Event-level idempotent MERGE 
+- 	Rejected event capture 
+- 	Delta optimization (Z-ORDER)
+
+------------------------------------------------------------------------
+
+#### STEP 4 -- GOLD PROCESSING
+
+Triggered every 30--60 minutes.
+
+-   Builds fact and dimension tables
+-   Applies business transformations
+-   Optimizes analytics-ready tables
+
+------------------------------------------------------------------------
+
+## 🔐 SECURITY AND GOVERNANCE
+
+-   IAM roles with least privilege access (Refer to: infra/)
+-   Secrets stored in AWS Secrets Manager
+-   Databricks token securely retrieved by Lambda
+-   Unity Catalog for governance
+-   Controlled SQS visibility timeout
+-   DLQ configuration
+-   Retry & Catch mechanisms in Step Functions
+-	idempotency and state control in DynamoDB
 
 ------------------------------------------------------------------------
