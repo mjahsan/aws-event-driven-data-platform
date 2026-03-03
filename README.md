@@ -103,8 +103,8 @@ At this stage, ingestion is complete.
 -  	Retrieves `run_id`
 -  	Polls job status via another Lambda
 -  	Updates DynamoDB status:
-    -   `validated → in_progress → success`
-    -   On failure: reverts to `validated`
+    -   `VALIDATED → IN_PROGRESS → SUCCESS(SILVER)/PARTIAL_SUCCESS(SILVER)`
+    -   On failure, `FAILED(SILVER)`: reverts to `VALIDATED`
 	
 Refer to: 
 	-	.png: step_functions/validated_to_silver_state_machine.png
