@@ -307,6 +307,38 @@ step_functions:
             step_functions_for_silver_to_gold
         script:
             step_functions/silver_to_gold_state_machine.json
+
+eventbridge:
+    validated_to_silver:
+        type:
+            eventbridge_schedule
+        schedule_pattern:
+            recurring_schedule
+        schedule_type:
+            rate_based_schedule
+        rate_expression:
+            rate(5, minutes)
+        flexible_time_window:
+            5 minutes
+        target:
+            aws_step_functions
+        state_machine:
+            validated_to_silver_state_machine
+    silver_to_gold:
+        type:
+            eventbridge_schedule
+        schedule_pattern:
+            recurring_schedule
+        schedule_type:
+            rate_based_schedule
+        rate_expression:
+            rate(30, minutes)
+        flexible_time_window:
+            30 minutes
+        target:
+            aws_step_functions
+        state_machine:
+            silver_to_gold_state_machine
             
 databricks:
     silver_and_bronze:
