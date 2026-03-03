@@ -334,20 +334,20 @@ Deploy Lambda functions using the referenced scripts.
 - 	Add Credentials using the IAM role's ARN in Unity Catalogue to generate trust policy. Attach the trust policy to the IAM role.
 -	Create two job pipelines:
 
-#### SILVER LAYER
+	##### SILVER LAYER
 
--	Table definition script
--   PySpark transformation script
--   Delta MERGE logic
--   Z-ORDER optimization
--   Unity Catalog schema creation
+	-	Table definition script
+	-   PySpark transformation script
+	-   Delta MERGE logic
+	-   Z-ORDER optimization
+	-   Unity Catalog schema creation
 
-### GOLD LAYER
--	Table definition script
--   SQL-based dimensional modeling
--   Fact tables (orders, payments)
--   Dimension tables (users)
--   Optimization scripts
+	##### GOLD LAYER
+	-	Table definition script
+	-   SQL-based dimensional modeling
+	-   Fact tables (orders, payments)
+	-   Dimension tables (users)
+	-   Optimization scripts
 
 ------------------------------------------------------------------------
 
