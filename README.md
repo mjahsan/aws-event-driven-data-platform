@@ -417,3 +417,18 @@ Triggered every 30--60 minutes.
 -	idempotency and state control in DynamoDB
 
 ------------------------------------------------------------------------
+
+## 🧠 DESIGN DECISIONS
+
+
+| Component        | Rationale                          |
+|------------------|------------------------------------|
+| SQS              | Decoupling & buffering             |
+| Lambda           | Lightweight validation             |
+| DynamoDB         | Idempotency & state tracking       |
+| Step Functions   | Reliable orchestration             |
+| Databricks       | Distributed processing             |
+| Delta Lake       | ACID + merge capability            |
+| Micro-batching   | Throughput optimization            |
+
+------------------------------------------------------------------------
